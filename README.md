@@ -118,6 +118,10 @@ python src/demo.py --config <配置文件的绝对路径>.yaml
 
 **注意：所有配置中的路径参数都可以使用绝对路径，或者相对于项目根目录的相对路径。**
 
+## 
+如果您觉得我们的项目还有点帮助，辛苦帮我们点个⭐，感谢！
+![](https://api.star-history.com/svg?repos=HumanAIGC-Engineering/OpenAvatarChat&type=Date)
+
 ## 贡献者
 
 [程刚](https://github.com/lovepope)
