@@ -120,6 +120,10 @@ Current implemented handler provide following configs:
 |Tts2Face.fps|25|Framerate of avatar, on better CPU, it can be set to 30.|
 |Tts2Face.enable_fast_mode|True|Lower the response delay, voice lag may occur if computation power is not enough.|
 
+##
+If you find this project useful, please ⭐️ star the repository. 
+![](https://api.star-history.com/svg?repos=HumanAIGC-Engineering/OpenAvatarChat&type=Date)
+
 ## Contributors
 
 [Gang Cheng](https://github.com/lovepope)
