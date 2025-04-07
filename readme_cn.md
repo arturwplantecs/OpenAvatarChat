@@ -66,6 +66,7 @@
 > ```bash
 > git submodule update --init --recursive
 > ```
+> 强烈建议：国内用户依然使用git clone的方式下载，而不要直接下载zip文件，方便这里的git submodule和git lfs的操作，github访问的问题，可以参考[github访问问题](https://github.com/maxiaof/github-hosts)
 
 
 #### 下载模型
