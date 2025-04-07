@@ -9,6 +9,13 @@
 <div style="display: flex; flex-direction: row; justify-content: center">
 <a href="https://github.com/HumanAIGC-Engineering/OpenAvatarChat" target="_blank"><img alt="Static Badge" style="display: block; padding-right: 5px; height: 20px;" src="https://img.shields.io/badge/github-white?logo=github&logoColor=black"></a>
 </div>
+## 0. ToDo
+
+我们后续计划：
+1. 预置100个数字人模型发布；(1个月内)
+2. 接入[LAM](https://github.com/aigc3d/LAM)（3周内）
+3. 接入[Qwen2.5-Omni](https://github.com/QwenLM/Qwen2.5-Omni)
+
 
 ## 1. Demo
 
