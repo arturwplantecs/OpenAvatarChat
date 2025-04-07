@@ -9,6 +9,7 @@
 <div style="display: flex; flex-direction: row; justify-content: center">
 <a href="https://github.com/HumanAIGC-Engineering/OpenAvatarChat" target="_blank"><img alt="Static Badge" style="display: block; padding-right: 5px; height: 20px;" src="https://img.shields.io/badge/github-white?logo=github&logoColor=black"></a>
 </div>
+
 ## 0. ToDo
 
 我们后续计划：
