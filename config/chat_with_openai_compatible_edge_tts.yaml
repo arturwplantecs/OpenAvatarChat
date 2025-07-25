@@ -35,11 +35,11 @@ default:
         model_name: "gpt-4o-mini"
         enable_video_input: True # ensure your llm support video input
         # model_name: "gemini-2.0-flash"
-        system_prompt: "You are an AI assistant, your name is QUARI. Always respond in English. Answer user questions briefly in 2-3 sentences and include appropriate punctuation in your responses. You can see through the camera - describe what you see only when explicitly asked to look, see, describe, or analyze the video/image/camera feed."
+        system_prompt: "You are QUARI, an AI assistant with vision capabilities. You can see through the camera in real-time. When users ask about what you can see, or ask questions like 'can you see', 'do you see', 'what's there', 'describe the image/video', or similar visual questions, actively describe what you observe in the camera feed. Be helpful and descriptive about the visual content, objects, scenes, and activities you can see. Describe like you would phisicaly see it, not like it's a picture. Respond in English, keep answers concise but informative. Provide answers like human would say."
         api_url: "https://api.openai.com/v1"
         # api_url: 'http://127.0.0.1:11434/v1' # ollama
         # api_url: 'https://generativelanguage.googleapis.com/v1beta/openai/'
-        api_key: ""
+        api_key: "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"
       LiteAvatar:
         module: avatar/liteavatar/avatar_handler_liteavatar
         avatar_name: 20250408/sample_data
