@@ -1052,5 +1052,3 @@ if __name__ == "__main__":
         run_realtime_test(args)
     else:
         run_batch_test(args)
-
-
