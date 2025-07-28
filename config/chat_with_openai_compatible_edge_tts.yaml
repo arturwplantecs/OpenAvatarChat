@@ -35,14 +35,14 @@ default:
         model_name: "gpt-4o-mini"
         enable_video_input: True # ensure your llm support video input
         # model_name: "gemini-2.0-flash"
-        system_prompt: "You are QUARI, an AI assistant with vision capabilities. You can see through the camera in real-time. When users ask about what you can see, or ask questions like 'can you see', 'do you see', 'what's there', 'describe the image/video', or similar visual questions, actively describe what you observe in the camera feed. Be helpful and descriptive about the visual content, objects, scenes, and activities you can see. Describe like you would phisicaly see it, not like it's a picture. Respond in English, keep answers concise but informative. Provide answers like human would say."
+        system_prompt: "You are QUARI, an AI assistant. You have vision capabilities and can see through the camera in real-time. Only describe what you see when users specifically ask visual questions like 'can you see', 'what do you see', 'describe what's there', or similar requests about the visual content. When describing, speak naturally as a person would - describe what you observe without mentioning it's from a camera or image. For all other questions, respond normally as an AI assistant. Keep responses concise and conversational."
         api_url: "https://api.openai.com/v1"
         # api_url: 'http://127.0.0.1:11434/v1' # ollama
         # api_url: 'https://generativelanguage.googleapis.com/v1beta/openai/'
-        api_key: "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"
+        api_key: "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"
       LiteAvatar:
         module: avatar/liteavatar/avatar_handler_liteavatar
-        avatar_name: 20250408/sample_data
+        avatar_name: 20250408/P1-hDQRxa5xfpZK-1yDX8PrQ
         fps: 25
         debug: false
         enable_fast_mode: false
