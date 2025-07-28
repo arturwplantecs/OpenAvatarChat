@@ -39,7 +39,7 @@ default:
         api_url: "https://api.openai.com/v1"
         # api_url: 'http://127.0.0.1:11434/v1' # ollama
         # api_url: 'https://generativelanguage.googleapis.com/v1beta/openai/'
-        api_key: "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"
+        api_key: "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"
       LiteAvatar:
         module: avatar/liteavatar/avatar_handler_liteavatar
         avatar_name: 20250408/sample_data
