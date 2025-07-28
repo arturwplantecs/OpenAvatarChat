@@ -45,15 +45,27 @@ class ChatHistory:
             }
         history = self.message_history
         messages = list(map(history_to_message, history))
-        messages.append({
-            "role": "user",
-            "content": [
-                {
-                    "type": "text",
-                    "text": filter_text(chat_text),
-                },
-            ] + (list(map(lambda x: {"type": "image_url", "image_url": {"url": ImageUtils.format_image(x)}}, images)))
-        })
+        
+        # Create message content based on whether images are provided
+        if images and len(images) > 0:
+            # Vision message with both text and images
+            user_message = {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text", 
+                        "text": filter_text(chat_text),
+                    },
+                ] + [{"type": "image_url", "image_url": {"url": ImageUtils.format_image(img)}} for img in images]
+            }
+        else:
+            # Text-only message
+            user_message = {
+                "role": "user",
+                "content": filter_text(chat_text)
+            }
+            
+        messages.append(user_message)
         self.add_message(HistoryMessage(role="human", content=chat_text))
         return messages        
     

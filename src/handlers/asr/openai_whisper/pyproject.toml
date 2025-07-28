@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "asr_openai_whisper"
+version = "0.1.0"
+description = "OpenAI Whisper ASR handler for OpenAvatarChat"
+dependencies = [
+    "openai-whisper",
+    "torch",
+    "torchaudio",
+    "transformers",
+]

@@ -16,6 +16,7 @@ dependencies = [
     "modelscope>=1.25.0",
     "numpy<=1.26.4",
     "openai>=1.72.0",
+    "openai-whisper",
     "opencv-python-headless~=4.11.0",
     "pip>=25.0.1",
     "pyaml>=25.1.0",
@@ -44,6 +45,7 @@ members = [
     "src/handlers/vad/silerovad",
     "src/handlers/tts/bailian_tts",
     "src/handlers/asr/sensevoice",
+    "src/handlers/asr/openai_whisper",
     "src/handlers/avatar/musetalk",
 ]
 
