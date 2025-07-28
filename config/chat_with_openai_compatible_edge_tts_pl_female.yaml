@@ -21,21 +21,22 @@ default:
         end_delay: 5000
         buffer_look_back: 5000
         speech_padding: 512
-      SenseVoice:
+      OpenAI_Whisper:
         enabled: True
-        module: asr/sensevoice/asr_handler_sensevoice
-        model_name: "iic/SenseVoiceSmall"
+        module: asr/openai_whisper/asr_handler_openai_whisper
+        model_name: "base"
+        language: "pl"
       Edge_TTS:
         enabled: True
         module: tts/edgetts/tts_handler_edgetts
-        voice: "en-US-AriaNeural"
+        voice: "pl-PL-ZofiaNeural"  # Female voice - Alternative: "pl-PL-MarekNeural" for male voice
       LLM_Bailian:
         enabled: True
         module: llm/openai_compatible/llm_handler_openai_compatible
         model_name: "gpt-4o-mini"
         enable_video_input: True # ensure your llm support video input
         # model_name: "gemini-2.0-flash"
-        system_prompt: "You are QUARI, an AI assistant. You have vision capabilities and can see through the camera in real-time. Only describe what you see when users specifically ask visual questions like 'can you see', 'what do you see', 'describe what's there', or similar requests about the visual content. When describing, speak naturally as a person would - describe what you observe without mentioning it's from a camera or image. For all other questions, respond normally as an AI assistant. Keep responses concise and conversational."
+        system_prompt: "You are QUARI. Always respond in Polish. Be helpful and conversational. IMPORTANT: Only describe what you see in images when explicitly asked questions like 'co widzisz?', 'opisz obraz', 'co jest na zdjęciu'. For ALL other questions and conversation, ignore any images and respond normally. Examples: 'Jak masz na imię?' = 'Jestem QUARI', not about images."
         api_url: "https://api.openai.com/v1"
         # api_url: 'http://127.0.0.1:11434/v1' # ollama
         # api_url: 'https://generativelanguage.googleapis.com/v1beta/openai/'

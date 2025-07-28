@@ -94,7 +94,8 @@ class HandlerTTS(HandlerBase, ABC):
         edge_tts.Communicate(text="测试音频启动", voice=self.voice)
 
     def filter_text(self, text):
-        pattern = r"[^a-zA-Z0-9\u4e00-\u9fff,.\~!?，。！？ ]"  # 匹配不在范围内的字符
+        # Include Polish diacritics: ą, ć, ę, ł, ń, ó, ś, ź, ż (and their uppercase versions)
+        pattern = r"[^a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ0-9\u4e00-\u9fff,.\~!?，。！？ \-:]"  # Allow Polish characters
         filtered_text = re.sub(pattern, "", text)
         return filtered_text
 
