@@ -39,3 +39,7 @@ exp/
 uv.lock
 logs/
 src/handlers/avatar/liteavatar/algo/liteavatar
+
+# Node.js dependencies
+node_modules/
+frontend/node_modules/
