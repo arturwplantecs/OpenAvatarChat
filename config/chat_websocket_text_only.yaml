@@ -1,0 +1,41 @@
+default:
+  logger:
+    log_level: "INFO"
+  service:
+    host: "0.0.0.0"
+    port: 8282
+    # Disable SSL for WebSocket development
+    # cert_file: "ssl_certs/localhost.crt"
+    # cert_key: "ssl_certs/localhost.key"
+  chat_engine:
+    model_root: "models"
+    handler_search_path:
+      - "src/handlers"
+    handler_configs:
+      RtcClient:
+        enabled: False
+        module: client/rtc_client/client_handler_rtc
+      SileroVad:
+        enabled: False
+        module: vad/silerovad/vad_handler_silero
+      OpenAI_Whisper:
+        enabled: False
+        module: asr/openai_whisper/asr_handler_openai_whisper
+      Edge_TTS:
+        enabled: False
+        module: tts/edgetts/tts_handler_edgetts
+      LLM_OpenAI:
+        enabled: True
+        module: llm/openai_compatible/llm_handler_openai_compatible
+        model_name: "gpt-4o-mini"
+        enable_video_input: False
+        system_prompt: "You are QUARI. Always respond in Polish. Be helpful and conversational."
+        api_url: "https://api.openai.com/v1"
+        api_key: "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"
+      LiteAvatar:
+        enabled: False
+        module: avatar/liteavatar/avatar_handler_liteavatar
+    outputs:
+      text:
+        handler: "LLM_OpenAI"
+        type: "avatar_text"

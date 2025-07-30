@@ -1,0 +1,22 @@
+default:
+  logger:
+    log_level: "INFO"
+  service:
+    host: "0.0.0.0"
+    port: 8282
+  chat_engine:
+    model_root: "models"
+    handler_search_path:
+      - "src/handlers"
+    handler_configs:
+      RtcClient:
+        enabled: False
+        module: client/rtc_client/client_handler_rtc
+      # Simple echo LLM for testing
+      EchoLLM:
+        enabled: True
+        module: llm/openai_compatible/llm_handler_openai_compatible
+        model_name: "gpt-3.5-turbo"
+        system_prompt: "You are a helpful AI assistant responding through text only."
+        api_url: "https://api.openai.com/v1"
+        # This will gracefully fall back to echo mode if no API key is provided

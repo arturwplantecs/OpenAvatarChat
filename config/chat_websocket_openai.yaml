@@ -1,0 +1,27 @@
+default:
+  logger:
+    log_level: "INFO"
+  service:
+    host: "0.0.0.0"
+    port: 8282
+  chat_engine:
+    model_root: "models"
+    handler_search_path:
+      - "src/handlers"
+    handler_configs:
+      RtcClient:
+        enabled: False
+        module: client/rtc_client/client_handler_rtc
+      # Use OpenAI API for LLM (requires OPENAI_API_KEY environment variable)
+      LLM_OpenAI:
+        enabled: True
+        module: llm/openai_compatible/llm_handler_openai_compatible
+        model_name: "gpt-3.5-turbo"
+        system_prompt: "You are a helpful AI assistant. Keep your responses concise and conversational, as if talking to someone in person."
+        api_url: "https://api.openai.com/v1"
+        # api_key will be read from OPENAI_API_KEY environment variable
+      # Enable EdgeTTS for speech synthesis (no API key needed)
+      EdgeTTS:
+        enabled: True
+        module: tts/edgetts/tts_handler_edge_tts
+        voice: "en-US-JennyNeural"

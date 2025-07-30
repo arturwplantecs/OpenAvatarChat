@@ -1,0 +1,50 @@
+default:
+  logger:
+    log_level: "INFO"
+  service:
+    host: "0.0.0.0"
+    port: 8282
+    # Disable SSL for WebSocket development
+    # cert_file: "ssl_certs/localhost.crt"
+    # cert_key: "ssl_certs/localhost.key"
+  chat_engine:
+    model_root: "models"
+    handler_search_path:
+      - "src/handlers"
+    handler_configs:
+      RtcClient:
+        enabled: False
+        module: client/rtc_client/client_handler_rtc
+      SileroVad:
+        enabled: True
+        module: vad/silerovad/vad_handler_silero
+        speaking_threshold: 0.5
+        start_delay: 2048
+        end_delay: 5000
+        buffer_look_back: 5000
+        speech_padding: 512
+      OpenAI_Whisper:
+        enabled: True
+        module: asr/openai_whisper/asr_handler_openai_whisper
+        model_name: "base"
+        language: "pl"
+      Edge_TTS:
+        enabled: True
+        module: tts/edgetts/tts_handler_edgetts
+        voice: "pl-PL-ZofiaNeural"  # Female voice - Alternative: "pl-PL-MarekNeural" for male voice
+      LLM_OpenAI:
+        enabled: True
+        module: llm/openai_compatible/llm_handler_openai_compatible
+        model_name: "gpt-4o-mini"
+        enable_video_input: True
+        system_prompt: "You are QUARI. Always respond in Polish. Be helpful and conversational. IMPORTANT: Only describe what you see in images when explicitly asked questions like 'co widzisz?', 'opisz obraz', 'co jest na zdjęciu'. For ALL other questions and conversation, ignore any images and respond normally. Examples: 'Jak masz na imię?' = 'Jestem QUARI', not about images."
+        api_url: "https://api.openai.com/v1"
+        api_key: "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"
+      LiteAvatar:
+        enabled: False  # Disable avatar for now to test text/voice AI
+        module: avatar/liteavatar/avatar_handler_liteavatar
+        avatar_name: "20250408/P1-hDQRxa5xfpZK-1yDX8PrQ"
+        fps: 25
+        debug: false
+        enable_fast_mode: false
+        use_gpu: true

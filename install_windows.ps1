@@ -159,17 +159,224 @@ function Install-PythonDependencies {
     }
 }
 
-# Handle CosyVoice special installation for Windows
-function Install-CosyVoiceWindows {
-    Write-Log "Setting up CosyVoice for Windows..."
-    Write-Warning-Log "CosyVoice on Windows requires Conda. Please install Miniconda if you plan to use local CosyVoice."
-    Write-Info-Log "To use CosyVoice locally on Windows:"
-    Write-Info-Log "1. Install Miniconda"
-    Write-Info-Log "2. Run: conda create -n openavatarchat python=3.10"
-    Write-Info-Log "3. Run: conda activate openavatarchat"
-    Write-Info-Log "4. Run: conda install -c conda-forge pynini==2.1.6"
-    Write-Info-Log "5. Set environment variable: `$env:VIRTUAL_ENV=`$env:CONDA_PREFIX"
-    Write-Info-Log "6. Use --active flag with uv commands"
+# Download models based on configuration
+function Install-ModelsForConfig {
+    param([string]$ConfigFile)
+    
+    $ConfigName = Split-Path $ConfigFile -Leaf
+    
+    Write-Log "Model download options for $ConfigName"
+    Write-Host "1. Download only required models for this config (default, recommended)"
+    Write-Host "2. Skip model downloads (install manually later)" 
+    Write-Host "3. Download additional models (for development/testing)"
+    Write-Host ""
+    $downloadChoice = Read-Host "Choose option [1-3] (default: 1)"
+    if ([string]::IsNullOrEmpty($downloadChoice)) { $downloadChoice = "1" }
+    
+    switch ($downloadChoice) {
+        "2" {
+            Write-Warning-Log "Skipping model downloads. You'll need to download them manually later."
+            return
+        }
+        "3" {
+            Write-Log "Will download additional models after required ones..."
+        }
+    }
+    
+    # Download models based on configuration
+    switch -Wildcard ($ConfigName) {
+        "*minicpm*" {
+            Write-Log "Downloading models for MiniCPM configuration..."
+            if ($downloadChoice -eq "1") {
+                Write-Log "Downloading MiniCPM-o-2.6-int4 model (faster, recommended)..."
+                if (Test-Path "scripts\download_MiniCPM-o_2.6-int4.sh") {
+                    bash scripts/download_MiniCPM-o_2.6-int4.sh
+                }
+            } else {
+                $modelType = Read-Host "Download full model (40GB+) or int4 quantized model (20GB+)? [full/int4] (default: int4)"
+                if ([string]::IsNullOrEmpty($modelType)) { $modelType = "int4" }
+                
+                if ($modelType -eq "int4") {
+                    if (Test-Path "scripts\download_MiniCPM-o_2.6-int4.sh") {
+                        bash scripts/download_MiniCPM-o_2.6-int4.sh
+                    }
+                } else {
+                    if (Test-Path "scripts\download_MiniCPM-o_2.6.sh") {
+                        bash scripts/download_MiniCPM-o_2.6.sh
+                    }
+                }
+            }
+            Install-LiteAvatarWeights
+            break
+        }
+        "*musetalk*" {
+            Write-Log "Downloading MuseTalk models..."
+            if (Test-Path "scripts\download_musetalk_weights.sh") {
+                bash scripts/download_musetalk_weights.sh
+            }
+            break
+        }
+        "*gs*" {
+            Write-Log "Downloading LAM models..."
+            Install-LAMModels
+            break
+        }
+        "*lam*" {
+            Write-Log "Downloading LAM models..."
+            Install-LAMModels
+            break
+        }
+        default {
+            Write-Log "Downloading LiteAvatar weights (required for most configurations)..."
+            Install-LiteAvatarWeights
+            break
+        }
+    }
+    
+    # Download additional models if requested
+    if ($downloadChoice -eq "3") {
+        Write-Log "Downloading additional models..."
+        Write-Host "Available additional models:"
+        Write-Host "a. LiteAvatar weights (if not already downloaded)"
+        Write-Host "b. LAM models"
+        Write-Host "c. MuseTalk models"
+        Write-Host "d. All models"
+        Write-Host "e. Skip additional downloads"
+        $additionalChoice = Read-Host "Choose additional models [a-e]"
+        
+        switch ($additionalChoice) {
+            "a" { Install-LiteAvatarWeights }
+            "b" { Install-LAMModels }
+            "c" { 
+                if (Test-Path "scripts\download_musetalk_weights.sh") {
+                    bash scripts/download_musetalk_weights.sh
+                }
+            }
+            "d" {
+                Install-LiteAvatarWeights
+                Install-LAMModels
+                if (Test-Path "scripts\download_musetalk_weights.sh") {
+                    bash scripts/download_musetalk_weights.sh
+                }
+            }
+            default { Write-Log "Skipping additional model downloads" }
+        }
+    }
+}
+
+# Download LiteAvatar weights with error handling
+function Install-LiteAvatarWeights {
+    if (Test-Path "src\handlers\avatar\liteavatar\algo\liteavatar\weights\model_1.onnx") {
+        Write-Log "LiteAvatar weights already exist"
+        return
+    }
+    
+    Write-Log "Downloading LiteAvatar weights..."
+    if (Test-Path "scripts\download_liteavatar_weights.sh") {
+        try {
+            bash scripts/download_liteavatar_weights.sh
+        } catch {
+            Write-Warning-Log "Failed to download LiteAvatar weights using script. Trying alternative method..."
+            # Alternative download using Python ModelScope API
+            Push-Location "src\handlers\avatar\liteavatar\algo\liteavatar"
+            try {
+                uv run python -c @"
+from modelscope import snapshot_download
+import os
+import shutil
+
+try:
+    os.makedirs('weights/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch/lm', exist_ok=True)
+    os.makedirs('weights', exist_ok=True)
+    
+    print('Downloading LiteAvatar model files...')
+    local_dir = snapshot_download('HumanAIGC-Engineering/LiteAvatarGallery', cache_dir='./cache')
+    
+    src_lm = os.path.join(local_dir, 'lite_avatar_weights/lm.pb')
+    src_model1 = os.path.join(local_dir, 'lite_avatar_weights/model_1.onnx')
+    src_model = os.path.join(local_dir, 'lite_avatar_weights/model.pb')
+    
+    dst_lm = 'weights/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch/lm/lm.pb'
+    dst_model1 = 'weights/model_1.onnx'
+    dst_model = 'weights/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch/model.pb'
+    
+    if os.path.exists(src_lm):
+        shutil.copy2(src_lm, dst_lm)
+        print('Copied lm.pb successfully')
+    
+    if os.path.exists(src_model1):
+        shutil.copy2(src_model1, dst_model1)
+        print('Copied model_1.onnx successfully')
+        
+    if os.path.exists(src_model):
+        shutil.copy2(src_model, dst_model)
+        print('Copied model.pb successfully')
+    
+    print('LiteAvatar model files downloaded successfully!')
+except Exception as e:
+    print(f'Error downloading models: {e}')
+    exit(1)
+"@
+            } catch {
+                Write-Warning-Log "Failed to download LiteAvatar weights"
+            } finally {
+                Pop-Location
+            }
+        }
+    }
+}
+
+# Download LAM models
+function Install-LAMModels {
+    Write-Log "Downloading LAM models..."
+    
+    # WAV2VEC2 model
+    if (-not (Test-Path "models\wav2vec2-base-960h")) {
+        Write-Log "Downloading wav2vec2-base-960h model..."
+        try {
+            git clone --depth 1 https://huggingface.co/facebook/wav2vec2-base-960h ./models/wav2vec2-base-960h
+        } catch {
+            Write-Warning-Log "Failed to download from HuggingFace, trying ModelScope..."
+            git clone --depth 1 https://www.modelscope.cn/AI-ModelScope/wav2vec2-base-960h.git ./models/wav2vec2-base-960h
+        }
+    } else {
+        Write-Log "wav2vec2-base-960h model already exists"
+    }
+    
+    # LAM audio2exp model
+    if (-not (Test-Path "models\LAM_audio2exp\pretrained_models")) {
+        Write-Log "Downloading LAM audio2exp model..."
+        New-Item -ItemType Directory -Force -Path "models\LAM_audio2exp"
+        
+        try {
+            # Try HuggingFace first
+            if (Get-Command wget -ErrorAction SilentlyContinue) {
+                wget https://huggingface.co/3DAIGC/LAM_audio2exp/resolve/main/LAM_audio2exp_streaming.tar -P ./models/LAM_audio2exp/
+            } else {
+                Invoke-WebRequest -Uri "https://huggingface.co/3DAIGC/LAM_audio2exp/resolve/main/LAM_audio2exp_streaming.tar" -OutFile "models\LAM_audio2exp\LAM_audio2exp_streaming.tar"
+            }
+        } catch {
+            Write-Warning-Log "Failed to download from HuggingFace, trying alternative source..."
+            try {
+                if (Get-Command wget -ErrorAction SilentlyContinue) {
+                    wget https://virutalbuy-public.oss-cn-hangzhou.aliyuncs.com/share/aigc3d/data/LAM/LAM_audio2exp_streaming.tar -P ./models/LAM_audio2exp/
+                } else {
+                    Invoke-WebRequest -Uri "https://virutalbuy-public.oss-cn-hangzhou.aliyuncs.com/share/aigc3d/data/LAM/LAM_audio2exp_streaming.tar" -OutFile "models\LAM_audio2exp\LAM_audio2exp_streaming.tar"
+                }
+            } catch {
+                Write-Warning-Log "Failed to download LAM audio2exp model"
+                return
+            }
+        }
+        
+        # Extract the tar file
+        if (Test-Path "models\LAM_audio2exp\LAM_audio2exp_streaming.tar") {
+            tar -xzvf ./models/LAM_audio2exp/LAM_audio2exp_streaming.tar -C ./models/LAM_audio2exp
+            Remove-Item "models\LAM_audio2exp\LAM_audio2exp_streaming.tar"
+        }
+    } else {
+        Write-Log "LAM audio2exp model already exists"
+    }
 }
 
 # Create SSL certificates
@@ -246,6 +453,11 @@ function Start-Installation {
     Install-PythonDependencies -ConfigFile $Config
     New-SSLCertificates
     New-EnvironmentFile
+    
+    # Download models for the selected configuration
+    if ($Config -ne "") {
+        Install-ModelsForConfig -ConfigFile $Config
+    }
     
     Write-Log "Installation completed successfully!" -Color Green
     Write-Host ""

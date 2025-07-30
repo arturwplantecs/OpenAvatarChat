@@ -114,40 +114,161 @@ install_config_deps() {
 download_models_for_config() {
     CONFIG_NAME=$(basename "$CONFIG_FILE")
     
+    log "Model download options for $CONFIG_NAME:"
+    echo "1. Download only required models for this config (default, recommended)"
+    echo "2. Skip model downloads (install manually later)"
+    echo "3. Download additional models (for development/testing)"
+    echo ""
+    read -p "Choose option [1-3] (default: 1): " download_choice
+    download_choice=${download_choice:-1}
+    
+    case $download_choice in
+        2)
+            warn "Skipping model downloads. You'll need to download them manually later."
+            return
+            ;;
+        3)
+            log "Will download additional models after required ones..."
+            ;;
+    esac
+    
+    # Download models based on configuration
     case "$CONFIG_NAME" in
         *"minicpm"*)
-            log "Downloading MiniCPM model..."
-            read -p "Download full model (40GB+) or int4 quantized model (20GB+)? [full/int4]: " model_type
-            if [ "$model_type" = "int4" ]; then
-                bash scripts/download_MiniCPM-o_2.6-int4.sh
+            log "Downloading models for MiniCPM configuration..."
+            if [ "$download_choice" = "1" ]; then
+                log "Downloading MiniCPM-o-2.6-int4 model (faster, recommended)..."
+                bash scripts/download_MiniCPM-o_2.6-int4.sh || warn "Failed to download MiniCPM model"
             else
-                bash scripts/download_MiniCPM-o_2.6.sh
+                read -p "Download full model (40GB+) or int4 quantized model (20GB+)? [full/int4] (default: int4): " model_type
+                model_type=${model_type:-int4}
+                if [ "$model_type" = "int4" ]; then
+                    bash scripts/download_MiniCPM-o_2.6-int4.sh || warn "Failed to download MiniCPM int4 model"
+                else
+                    bash scripts/download_MiniCPM-o_2.6.sh || warn "Failed to download MiniCPM full model"
+                fi
             fi
-            bash scripts/download_liteavatar_weights.sh
+            download_liteavatar_weights
             ;;
         *"musetalk"*)
             log "Downloading MuseTalk models..."
-            bash scripts/download_musetalk_weights.sh
+            bash scripts/download_musetalk_weights.sh || warn "Failed to download MuseTalk models"
             ;;
         *"gs"*|*"lam"*)
             log "Downloading LAM models..."
-            # WAV2VEC2 model
-            if [ ! -d "./models/wav2vec2-base-960h" ]; then
-                git clone --depth 1 https://huggingface.co/facebook/wav2vec2-base-960h ./models/wav2vec2-base-960h
-            fi
-            # LAM audio2exp model
-            mkdir -p ./models/LAM_audio2exp/
-            wget https://huggingface.co/3DAIGC/LAM_audio2exp/resolve/main/LAM_audio2exp_streaming.tar -P ./models/LAM_audio2exp/ || {
-                warn "Failed to download from HuggingFace, trying alternative source..."
-                wget https://virutalbuy-public.oss-cn-hangzhou.aliyuncs.com/share/aigc3d/data/LAM/LAM_audio2exp_streaming.tar -P ./models/LAM_audio2exp/
-            }
-            tar -xzvf ./models/LAM_audio2exp/LAM_audio2exp_streaming.tar -C ./models/LAM_audio2exp && rm ./models/LAM_audio2exp/LAM_audio2exp_streaming.tar
+            download_lam_models
             ;;
         *)
-            log "Downloading LiteAvatar weights..."
-            bash scripts/download_liteavatar_weights.sh
+            log "Downloading LiteAvatar weights (required for most configurations)..."
+            download_liteavatar_weights
             ;;
     esac
+    
+    # Download additional models if requested
+    if [ "$download_choice" = "3" ]; then
+        log "Downloading additional models..."
+        echo "Available additional models:"
+        echo "a. LiteAvatar weights (if not already downloaded)"
+        echo "b. LAM models"
+        echo "c. MuseTalk models"
+        echo "d. All models"
+        echo "e. Skip additional downloads"
+        read -p "Choose additional models [a-e]: " additional_choice
+        
+        case $additional_choice in
+            a) download_liteavatar_weights ;;
+            b) download_lam_models ;;
+            c) bash scripts/download_musetalk_weights.sh || warn "Failed to download MuseTalk models" ;;
+            d) 
+                download_liteavatar_weights
+                download_lam_models
+                bash scripts/download_musetalk_weights.sh || warn "Failed to download MuseTalk models"
+                ;;
+            *) log "Skipping additional model downloads" ;;
+        esac
+    fi
+}
+
+# Download LiteAvatar weights with error handling
+download_liteavatar_weights() {
+    if [ -f "src/handlers/avatar/liteavatar/algo/liteavatar/weights/model_1.onnx" ]; then
+        log "LiteAvatar weights already exist"
+        return
+    fi
+    
+    log "Downloading LiteAvatar weights..."
+    bash scripts/download_liteavatar_weights.sh || {
+        warn "Failed to download LiteAvatar weights using script. Trying alternative method..."
+        # Alternative download using Python ModelScope API
+        cd src/handlers/avatar/liteavatar/algo/liteavatar
+        uv run python -c "
+from modelscope import snapshot_download
+import os
+import shutil
+
+try:
+    os.makedirs('weights/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch/lm', exist_ok=True)
+    os.makedirs('weights', exist_ok=True)
+    
+    print('Downloading LiteAvatar model files...')
+    local_dir = snapshot_download('HumanAIGC-Engineering/LiteAvatarGallery', cache_dir='./cache')
+    
+    src_lm = os.path.join(local_dir, 'lite_avatar_weights/lm.pb')
+    src_model1 = os.path.join(local_dir, 'lite_avatar_weights/model_1.onnx')
+    src_model = os.path.join(local_dir, 'lite_avatar_weights/model.pb')
+    
+    dst_lm = 'weights/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch/lm/lm.pb'
+    dst_model1 = 'weights/model_1.onnx'
+    dst_model = 'weights/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch/model.pb'
+    
+    if os.path.exists(src_lm):
+        shutil.copy2(src_lm, dst_lm)
+        print(f'Copied lm.pb successfully')
+    
+    if os.path.exists(src_model1):
+        shutil.copy2(src_model1, dst_model1)
+        print(f'Copied model_1.onnx successfully')
+        
+    if os.path.exists(src_model):
+        shutil.copy2(src_model, dst_model)
+        print(f'Copied model.pb successfully')
+    
+    print('LiteAvatar model files downloaded successfully!')
+except Exception as e:
+    print(f'Error downloading models: {e}')
+    exit(1)
+" || warn "Failed to download LiteAvatar weights"
+        cd - > /dev/null
+    }
+}
+
+# Download LAM models
+download_lam_models() {
+    log "Downloading LAM models..."
+    
+    # WAV2VEC2 model
+    if [ ! -d "./models/wav2vec2-base-960h" ]; then
+        log "Downloading wav2vec2-base-960h model..."
+        git clone --depth 1 https://huggingface.co/facebook/wav2vec2-base-960h ./models/wav2vec2-base-960h || {
+            warn "Failed to download from HuggingFace, trying ModelScope..."
+            git clone --depth 1 https://www.modelscope.cn/AI-ModelScope/wav2vec2-base-960h.git ./models/wav2vec2-base-960h
+        }
+    else
+        log "wav2vec2-base-960h model already exists"
+    fi
+    
+    # LAM audio2exp model
+    if [ ! -d "./models/LAM_audio2exp/pretrained_models" ]; then
+        log "Downloading LAM audio2exp model..."
+        mkdir -p ./models/LAM_audio2exp/
+        wget https://huggingface.co/3DAIGC/LAM_audio2exp/resolve/main/LAM_audio2exp_streaming.tar -P ./models/LAM_audio2exp/ || {
+            warn "Failed to download from HuggingFace, trying alternative source..."
+            wget https://virutalbuy-public.oss-cn-hangzhou.aliyuncs.com/share/aigc3d/data/LAM/LAM_audio2exp_streaming.tar -P ./models/LAM_audio2exp/
+        }
+        tar -xzvf ./models/LAM_audio2exp/LAM_audio2exp_streaming.tar -C ./models/LAM_audio2exp && rm ./models/LAM_audio2exp/LAM_audio2exp_streaming.tar
+    else
+        log "LAM audio2exp model already exists"
+    fi
 }
 
 # Create SSL certificates

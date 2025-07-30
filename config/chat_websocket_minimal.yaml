@@ -1,0 +1,31 @@
+default:
+  logger:
+    log_level: "INFO"
+  service:
+    host: "0.0.0.0"
+    port: 8282
+    # Disable SSL for development to avoid certificate issues
+    # cert_file: "ssl_certs/localhost.crt"
+    # cert_key: "ssl_certs/localhost.key"
+  chat_engine:
+    model_root: "models"
+    handler_search_path:
+      - "src/handlers"
+    handler_configs:
+      RtcClient:
+        enabled: False
+        module: client/rtc_client/client_handler_rtc
+      # Enable basic LLM for WebSocket chat
+      LLM_OpenAI:
+        enabled: True
+        module: llm/openai_compatible/llm_handler_openai_compatible
+        model_name: "gpt-3.5-turbo"
+        system_prompt: "You are a helpful AI assistant. Keep your responses concise and conversational."
+        api_url: "https://api.openai.com/v1"
+        # api_key: ""  # Set via OPENAI_API_KEY environment variable
+      # Optional: Enable simple avatar (you can enable this if you have the models)
+      # AvatarLiteAvatar:
+      #   enabled: False
+      #   module: avatar/liteavatar/avatar_handler_liteavatar
+      #   avatar_name: "sample_data"
+      #   fps: 25
