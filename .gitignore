@@ -38,3 +38,4 @@ dump_avatar_audio.pcm
 exp/
 uv.lock
 logs/
+src/handlers/avatar/liteavatar/algo/liteavatar
