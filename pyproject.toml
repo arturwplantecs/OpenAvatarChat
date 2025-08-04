@@ -37,12 +37,14 @@ dependencies = [
     "funasr>=1.2.6",
     "faster-whisper>=1.1.1",
     "nvidia-cudnn-cu12>=9.1.0.70",
+    "resampy>=0.4.3",
 ]
 
 [tool.uv.workspace]
 members = [
     "src/handlers/tts/edgetts",
     "src/handlers/tts/cosyvoice",
+    "src/handlers/tts/pipertts",
     "src/handlers/llm/minicpm",
     "src/handlers/avatar/liteavatar",
     "src/handlers/avatar/lam",

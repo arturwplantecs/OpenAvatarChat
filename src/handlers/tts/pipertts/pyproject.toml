@@ -1,0 +1,10 @@
+[project]
+name = "pipertts-handler"
+version = "0.1.0"
+description = "PiperTTS handler for OpenAvatarChat"
+dependencies = [
+    "numpy",
+    "librosa",
+    "loguru",
+    "pydantic",
+]

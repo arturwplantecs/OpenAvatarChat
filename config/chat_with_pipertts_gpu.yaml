@@ -40,18 +40,19 @@ default:
         module: tts/pipertts/tts_handler_pipertts
         model_path: "models/piper/pl_PL-gosia-medium.onnx"
         config_path: "models/piper/pl_PL-gosia-medium.onnx.json"
-        sample_rate: 24000  # Match LiteAvatar's expected sample rate for minimal resampling
+        sample_rate: 22050
         speaker_id: null  # Set to specific speaker ID if multi-speaker model
-        length_scale: 1.0  # 1.0 = normal speech pace
-        noise_scale: 0.1  # Very low voice variation for stable voice (0.0-1.0)
-        noise_w: 0.1  # Very low phoneme variation for cleaner voice (0.0-1.0)
+        length_scale: 1.0  # 1.0 = normal speed, <1.0 = faster, >1.0 = slower
+        noise_scale: 0.667  # Voice variation (0.0-1.0)
+        noise_w: 0.8  # Phoneme variation (0.0-1.0)
+        
       LLM_Bailian:
         enabled: True
         module: llm/openai_compatible/llm_handler_openai_compatible
         model_name: "gpt-4o-mini"
         enable_video_input: True # ensure your llm support video input
         # model_name: "gemini-2.0-flash"
-        system_prompt: "You are QUARI. Always respond in Polish. Be helpful and conversational. IMPORTANT: Only describe what you see in images when explicitly asked questions like 'co widzisz?', 'opisz obraz', 'co jest na zdjęciu'. For ALL other questions and conversation, ignore any images and respond normally. Examples: 'Jak masz na imię?' = 'Jestem QUARI', not about images. Make sure answer is suitable for text to speech synthesis, so don't do list like '1 Mercury, 2 Venus' do 'Mercury, Venus' etc. This applies to everything. Write numbers as words, like 'dwa' instead of '2'."
+        system_prompt: "You are QUARI. Always respond in Polish. Be helpful and conversational. IMPORTANT: Only describe what you see in images when explicitly asked questions like 'co widzisz?', 'opisz obraz', 'co jest na zdjęciu'. For ALL other questions and conversation, ignore any images and respond normally. Examples: 'Jak masz na imię?' = 'Jestem QUARI', not about images."
         api_url: "https://api.openai.com/v1"
         # api_url: 'http://127.0.0.1:11434/v1' # ollama
         # api_url: 'https://generativelanguage.googleapis.com/v1beta/openai/'

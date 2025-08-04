@@ -10,7 +10,8 @@ echo "========================================="
 echo "📋 Configuration: chat_with_faster_whisper_stable.yaml"
 echo "🎯 GPU Acceleration: ENABLED for ALL components"
 echo "🧠 STT Model: Faster-Whisper large-v3 (CUDA)"
-echo "👤 Avatar: LiteAvatar (GPU accelerated)"
+echo "�️ TTS Model: PiperTTS Polish (Local, High Quality)"
+echo "�👤 Avatar: LiteAvatar (GPU accelerated)"
 echo "========================================="
 
 # Comprehensive CUDA Environment Setup
