@@ -33,6 +33,10 @@ dependencies = [
     "torchvision",
     "torchaudio",
     "python-dotenv>=1.1.0",
+    "assemblyai>=0.42.1",
+    "funasr>=1.2.6",
+    "faster-whisper>=1.1.1",
+    "nvidia-cudnn-cu12>=9.1.0.70",
 ]
 
 [tool.uv.workspace]

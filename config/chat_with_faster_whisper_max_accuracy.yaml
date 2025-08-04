@@ -1,0 +1,81 @@
+default:
+  logger:
+    log_level: "INFO"
+  service:
+    host: "0.0.0.0"
+    port: 8282
+    cert_file: "ssl_certs/localhost.crt"
+    cert_key: "ssl_certs/localhost.key"
+  chat_engine:
+    model_root: "models"
+    handler_search_path:
+      - "src/handlers"
+    handler_configs:
+      RtcClient:
+        module: client/rtc_client/client_handler_rtc
+        concurrent_limit: 1
+      SileroVad:
+        module: vad/silerovad/vad_handler_silero
+        speaking_threshold: 0.5
+        start_delay: 2048
+        end_delay: 5000
+        buffer_look_back: 5000
+        speech_padding: 512
+      FasterWhisper:
+        enabled: True
+        module: asr/faster_whisper/handler
+        model_size: "large-v3"  # Maximum accuracy model (options: tiny, base, small, medium, large-v1, large-v2, large-v3)
+        language: "pl"  # Polish language
+        device: "cuda"  # Force GPU for maximum accuracy
+        compute_type: "float16"  # Use float16 for GPU maximum performance
+        
+        # Accuracy-focused settings (prioritizing accuracy over speed)
+        beam_size: 10  # Higher beam size for better accuracy (default: 5)
+        best_of: 10  # More candidates to consider (default: 5)
+        patience: 2.0  # Higher patience for thorough search (default: 1.0)
+        length_penalty: 1.0  # Length penalty for beam search
+        repetition_penalty: 1.1  # Slight penalty for repetitions
+        no_repeat_ngram_size: 3  # Prevent repeating 3-grams
+        temperature: 0.0  # Deterministic output (no randomness)
+        compression_ratio_threshold: 2.4  # Compression ratio threshold
+        log_prob_threshold: -1.0  # Log probability threshold
+        no_speech_threshold: 0.5  # Lower threshold for detecting speech
+        
+        # Audio processing settings optimized for accuracy
+        sample_rate: 16000
+        channels: 1
+        chunk_size: 2048  # Larger chunks for better context
+        
+        # STT precision optimizations for ReSpeaker
+        audio_device: "respeaker_stt"
+        vad_threshold: 0.35  # Lower threshold for more sensitive detection
+        energy_threshold: 150  # Lower threshold for quieter speech
+        dynamic_energy_threshold: True
+        dynamic_energy_adjustment_damping: 0.08  # More responsive adjustment
+        dynamic_energy_ratio: 2.5  # Higher ratio for better detection
+        pause_threshold: 1.5  # Longer pause for better phrase boundaries
+        phrase_threshold: 0.15  # Lower threshold for phrase detection
+        non_speaking_duration: 0.25  # Shorter duration for faster response
+        
+      Edge_TTS:
+        enabled: True
+        module: tts/edgetts/tts_handler_edgetts
+        voice: "pl-PL-ZofiaNeural"  # Female voice - Alternative: "pl-PL-MarekNeural" for male voice
+      LLM_Bailian:
+        enabled: True
+        module: llm/openai_compatible/llm_handler_openai_compatible
+        model_name: "gpt-4o-mini"
+        enable_video_input: True # ensure your llm support video input
+        # model_name: "gemini-2.0-flash"
+        system_prompt: "You are QUARI. Always respond in Polish. Be helpful and conversational. IMPORTANT: Only describe what you see in images when explicitly asked questions like 'co widzisz?', 'opisz obraz', 'co jest na zdjęciu'. For ALL other questions and conversation, ignore any images and respond normally. Examples: 'Jak masz na imię?' = 'Jestem QUARI', not about images."
+        api_url: "https://api.openai.com/v1"
+        # api_url: 'http://127.0.0.1:11434/v1' # ollama
+        # api_url: 'https://generativelanguage.googleapis.com/v1beta/openai/'
+        api_key: "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"
+      LiteAvatar:
+        module: avatar/liteavatar/avatar_handler_liteavatar
+        avatar_name: 20250408/P1-hDQRxa5xfpZK-1yDX8PrQ
+        fps: 25
+        debug: false
+        enable_fast_mode: false
+        use_gpu: false  # Disabled to free GPU memory for STT maximum accuracy

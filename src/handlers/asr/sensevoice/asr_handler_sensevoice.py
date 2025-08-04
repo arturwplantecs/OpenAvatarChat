@@ -23,6 +23,23 @@ from engine_utils.general_slicer import SliceContext, slice_data
 
 class ASRConfig(HandlerBaseConfigModel, BaseModel):
     model_name: str = Field(default="iic/SenseVoiceSmall")
+    language: str = Field(default="auto")  # Language code: "auto", "zh", "en", "ja", "ko", "pl", etc.
+    
+    # Audio processing settings
+    sample_rate: int = Field(default=16000)
+    channels: int = Field(default=1)
+    chunk_size: int = Field(default=512)
+    
+    # STT precision optimizations
+    audio_device: str = Field(default="respeaker_stt")
+    vad_threshold: float = Field(default=0.6)
+    energy_threshold: int = Field(default=300)
+    dynamic_energy_threshold: bool = Field(default=True)
+    dynamic_energy_adjustment_damping: float = Field(default=0.15)
+    dynamic_energy_ratio: float = Field(default=1.5)
+    pause_threshold: float = Field(default=0.8)
+    phrase_threshold: float = Field(default=0.3)
+    non_speaking_duration: float = Field(default=0.5)
 
 
 class ASRContext(HandlerContext):
@@ -51,6 +68,23 @@ class HandlerASR(HandlerBase, ABC):
         super().__init__()
 
         self.model_name = 'iic/SenseVoiceSmall'
+        self.language = 'auto'
+        
+        # Audio processing settings
+        self.sample_rate = 16000
+        self.channels = 1
+        self.chunk_size = 512
+        
+        # STT precision optimizations
+        self.audio_device = "respeaker_stt"
+        self.vad_threshold = 0.6
+        self.energy_threshold = 300
+        self.dynamic_energy_threshold = True
+        self.dynamic_energy_adjustment_damping = 0.15
+        self.dynamic_energy_ratio = 1.5
+        self.pause_threshold = 0.8
+        self.phrase_threshold = 0.3
+        self.non_speaking_duration = 0.5
 
         if torch.cuda.is_available():
             self.device = torch.device("cuda:0")
@@ -87,8 +121,29 @@ class HandlerASR(HandlerBase, ABC):
     def load(self, engine_config: ChatEngineConfigModel, handler_config: Optional[BaseModel] = None):
         if isinstance(handler_config, ASRConfig):
             self.model_name = handler_config.model_name
+            self.language = handler_config.language
+            
+            # Audio processing settings
+            self.sample_rate = handler_config.sample_rate
+            self.channels = handler_config.channels
+            self.chunk_size = handler_config.chunk_size
+            
+            # STT precision optimizations
+            self.audio_device = handler_config.audio_device
+            self.vad_threshold = handler_config.vad_threshold
+            self.energy_threshold = handler_config.energy_threshold
+            self.dynamic_energy_threshold = handler_config.dynamic_energy_threshold
+            self.dynamic_energy_adjustment_damping = handler_config.dynamic_energy_adjustment_damping
+            self.dynamic_energy_ratio = handler_config.dynamic_energy_ratio
+            self.pause_threshold = handler_config.pause_threshold
+            self.phrase_threshold = handler_config.phrase_threshold
+            self.non_speaking_duration = handler_config.non_speaking_duration
 
+        logger.info(f"Loading SenseVoice model: {self.model_name} for language: {self.language}")
+        logger.info(f"Audio settings - Sample rate: {self.sample_rate}Hz, Channels: {self.channels}, Chunk size: {self.chunk_size}")
+        logger.info(f"Precision settings - VAD threshold: {self.vad_threshold}, Energy threshold: {self.energy_threshold}")
         self.model = AutoModel(model=self.model_name, disable_update=True)
+        logger.info("SenseVoice model loaded successfully")
 
     def create_context(self, session_context, handler_config=None):
         if not isinstance(handler_config, ASRConfig):
@@ -139,8 +194,12 @@ class HandlerASR(HandlerBase, ABC):
             logger.info('dump audio')
             context.audio_dump_file.write(output_audio.tobytes())
 
-        res = self.model.generate(input=output_audio, batch_size_s=10)
-        logger.info(res)
+        # Generate transcription with language specification
+        if self.language != "auto":
+            res = self.model.generate(input=output_audio, batch_size_s=10, language=self.language)
+        else:
+            res = self.model.generate(input=output_audio, batch_size_s=10)
+        logger.info(f"SenseVoice result (language: {self.language}): {res}")
         context.output_audios.clear()
         output_text = re.sub(r"<\|.*?\|>", "", res[0]['text'])
         if len(output_text) == 0:
