@@ -153,6 +153,25 @@ install_python_deps() {
     # Install all dependencies
     log "Installing all dependencies (this may take a while)..."
     uv sync --all-packages
+    
+    # Verify CUDA libraries installation
+    log "Verifying CUDA libraries installation..."
+    VENV_SITE_PACKAGES=".venv/lib/python3.11/site-packages"
+    
+    if [ -d "$VENV_SITE_PACKAGES/nvidia/cudnn/lib" ]; then
+        log "✅ cuDNN libraries found in virtual environment"
+        CUDNN_COUNT=$(find "$VENV_SITE_PACKAGES/nvidia/cudnn/lib" -name "libcudnn*.so*" | wc -l)
+        log "Found $CUDNN_COUNT cuDNN library files"
+    else
+        warn "⚠️  cuDNN libraries not found in expected location"
+        warn "GPU acceleration may not work properly"
+    fi
+    
+    if [ -d "$VENV_SITE_PACKAGES/ctranslate2.libs" ]; then
+        log "✅ CTranslate2 CUDA libraries found"
+    else
+        warn "⚠️  CTranslate2 CUDA libraries not found"
+    fi
 }
 
 # Download models based on user choice
@@ -171,6 +190,7 @@ download_models() {
     case $model_choice in
         1)
             warn "Skipping model downloads. You'll need to download them manually later."
+            warn "Note: PiperTTS models are required and have been downloaded automatically."
             ;;
         2)
             log "Downloading LiteAvatar weights..."
@@ -222,6 +242,7 @@ download_models() {
             ;;
         *)
             warn "Invalid option. Skipping model downloads."
+            warn "Note: PiperTTS models are required and have been downloaded automatically."
             ;;
     esac
 }
@@ -238,9 +259,61 @@ setup_ssl() {
     fi
 }
 
+# Setup PiperTTS
+setup_pipertts() {
+    log "Setting up PiperTTS..."
+    
+    # Check if Piper models already exist
+    if [ -f "models/piper/pl_PL-gosia-medium.onnx" ]; then
+        log "PiperTTS models already exist"
+        return
+    fi
+    
+    # Run the PiperTTS setup script automatically (non-interactive)
+    if [ -f "scripts/setup_pipertts.sh" ]; then
+        log "Downloading PiperTTS models..."
+        # Make the script executable
+        chmod +x scripts/setup_pipertts.sh
+        
+        # Create models directory
+        mkdir -p models/piper
+        
+        # Download the models directly without interactive prompts
+        cd models/piper || return
+        
+        MODEL_NAME="pl_PL-gosia-medium"
+        MODEL_URL="https://huggingface.co/rhasspy/piper-voices/resolve/main/pl/pl_PL/gosia/medium/pl_PL-gosia-medium.onnx"
+        CONFIG_URL="https://huggingface.co/rhasspy/piper-voices/resolve/main/pl/pl_PL/gosia/medium/pl_PL-gosia-medium.onnx.json"
+        
+        if [[ ! -f "${MODEL_NAME}.onnx" ]]; then
+            log "Downloading Piper model: ${MODEL_NAME}.onnx"
+            wget -O "${MODEL_NAME}.onnx" "$MODEL_URL" || warn "Failed to download Piper model"
+        fi
+        
+        if [[ ! -f "${MODEL_NAME}.onnx.json" ]]; then
+            log "Downloading Piper config: ${MODEL_NAME}.onnx.json"
+            wget -O "${MODEL_NAME}.onnx.json" "$CONFIG_URL" || warn "Failed to download Piper config"
+        fi
+        
+        cd - > /dev/null || return
+        
+        if [ -f "models/piper/pl_PL-gosia-medium.onnx" ]; then
+            log "PiperTTS setup completed successfully"
+        else
+            warn "PiperTTS setup may have failed. Please run scripts/setup_pipertts.sh manually"
+        fi
+    else
+        warn "PiperTTS setup script not found"
+    fi
+}
+
 # Post-installation configuration
 post_install_config() {
     log "Running post-installation configuration..."
+    
+    # Make launch scripts executable
+    log "Making launch scripts executable..."
+    chmod +x launch_max_speed_gpu.sh launch_gpu_stt.sh start_gpu_stt.sh start_max_accuracy.sh 2>/dev/null || true
     
     # Run post-config script for a default configuration
     if [ -f "scripts/post_config_install.sh" ]; then
@@ -292,25 +365,66 @@ main() {
     update_submodules
     install_python_deps
     setup_ssl
+    setup_pipertts
     create_env_template
     download_models
     post_install_config
     
     log "Installation completed successfully!"
     echo ""
+    info "✅ CUDA/cuDNN Setup Verification:"
+    if [ -d ".venv/lib/python3.11/site-packages/nvidia/cudnn/lib" ]; then
+        CUDNN_COUNT=$(find ".venv/lib/python3.11/site-packages/nvidia/cudnn/lib" -name "libcudnn*.so*" | wc -l)
+        echo "   📦 Found $CUDNN_COUNT cuDNN library files"
+        echo "   📂 cuDNN path: .venv/lib/python3.11/site-packages/nvidia/cudnn/lib"
+        echo "   ✅ GPU acceleration should work properly"
+    else
+        echo "   ⚠️  cuDNN libraries not found - GPU acceleration may be limited"
+        echo "   💡 This is normal if you don't have an NVIDIA GPU"
+    fi
+    
+    # Check if launch scripts are executable
+    if [ -x "launch_max_speed_gpu.sh" ]; then
+        echo "   ✅ Launch scripts are executable"
+    else
+        echo "   📝 Making launch scripts executable..."
+        chmod +x launch_max_speed_gpu.sh launch_gpu_stt.sh start_gpu_stt.sh start_max_accuracy.sh 2>/dev/null || true
+    fi
+    echo ""
     info "Next steps:"
     echo "1. Edit the .env file with your API keys (if using API services)"
     echo "2. Choose a configuration from the config/ directory"
-    echo "3. Run the application with:"
-    echo "   uv run src/demo.py --config config/chat_with_openai_compatible_edge_tts.yaml"
+    
+    # Provide GPU-specific recommendations
+    if command -v nvidia-smi &> /dev/null && nvidia-smi > /dev/null 2>&1; then
+        echo "3. Run the application with GPU acceleration (recommended):"
+        echo "   ./launch_max_speed_gpu.sh"
+        echo ""
+        info "🚀 GPU Accelerated Options (recommended for NVIDIA GPUs):"
+        echo "- ./launch_max_speed_gpu.sh (fastest - all components GPU accelerated)"
+        echo "- ./launch_gpu_stt.sh (maximum accuracy STT)"
+    else
+        echo "3. Run the application:"
+        echo "   uv run src/demo.py --config config/chat_with_openai_compatible_edge_tts.yaml"
+        echo ""
+        info "💻 CPU-based Options (no NVIDIA GPU detected):"
+        echo "- uv run src/demo.py --config config/chat_with_openai_compatible_edge_tts.yaml"
+    fi
+    
     echo ""
-    info "Available configurations:"
-    echo "- config/chat_with_openai_compatible_edge_tts.yaml (recommended for beginners)"
-    echo "- config/chat_with_openai_compatible_bailian_cosyvoice.yaml"
-    echo "- config/chat_with_minicpm.yaml (requires local MiniCPM model)"
-    echo "- config/chat_with_gs.yaml (requires LAM models)"
+    info "Alternative configurations:"
+    echo "- uv run src/demo.py --config config/chat_with_faster_whisper_stable.yaml"
+    echo "- uv run src/demo.py --config config/chat_with_openai_compatible_edge_tts.yaml"
     echo ""
-    info "For more information, see the README.md file"
+    info "Quick test:"
+    if command -v nvidia-smi &> /dev/null && nvidia-smi > /dev/null 2>&1; then
+        echo "   ./launch_max_speed_gpu.sh  # GPU accelerated (recommended)"
+    else
+        echo "   uv run src/demo.py --config config/chat_with_openai_compatible_edge_tts.yaml"
+    fi
+    echo ""
+    info "The application will be available at: https://localhost:8282"
+    echo "For more information, see the README.md file"
 }
 
 # Run main function
