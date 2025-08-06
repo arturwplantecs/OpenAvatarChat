@@ -5,7 +5,8 @@ Application settings and configuration
 import os
 from pathlib import Path
 from typing import List, Dict, Any
-from pydantic import BaseSettings, Field
+from pydantic_settings import BaseSettings
+from pydantic import Field
 from functools import lru_cache
 
 
@@ -30,7 +31,7 @@ class Settings(BaseSettings):
     
     # Pipeline configuration file
     pipeline_config_path: str = Field(
-        default="config/chat_with_faster_whisper_stable.yaml",
+        default="api/config/pipeline.yaml",
         description="Path to pipeline configuration file"
     )
     
@@ -61,9 +62,14 @@ class Settings(BaseSettings):
     workers: int = Field(default=1, description="Number of worker processes")
     max_concurrent_requests: int = Field(default=10, description="Maximum concurrent requests")
     
+    # API Keys (optional)
+    openai_api_key: str = Field(default="", description="OpenAI API key")
+    dashscope_api_key: str = Field(default="", description="DashScope API key")
+    
     class Config:
         env_file = ".env"
         env_prefix = "AVATARCHAT_"
+        extra = "ignore"  # Ignore extra fields
 
 
 @lru_cache()

@@ -6,10 +6,12 @@ Independent backend API extracted from the original OpenAvatarChat application
 
 import sys
 import os
+import time
+from datetime import datetime
 from pathlib import Path
 from typing import Dict
 import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import asyncio
@@ -20,8 +22,8 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root / "src"))
 sys.path.insert(0, str(Path(__file__).parent))  # Add current directory for relative imports
 
-from models.requests import CreateSessionRequest, TextMessageRequest
-from models.responses import SessionResponse, HealthResponse
+from api_models.requests import CreateSessionRequest, TextMessageRequest
+from api_models.responses import SessionResponse, HealthResponse
 from services.session_manager import SessionManager
 from services.pipeline_service import PipelineService
 from utils.websocket_manager import WebSocketManager
@@ -33,6 +35,9 @@ logger = logging.getLogger(__name__)
 
 # Initialize settings
 settings = get_settings()
+
+# Track application start time
+start_time = time.time()
 
 # Create FastAPI app
 app = FastAPI(
@@ -93,8 +98,9 @@ async def health_check():
         pipeline_status = await pipeline_service.get_status()
         return HealthResponse(
             status="healthy",
+            version="1.0.0",
             pipeline_status=pipeline_status,
-            active_sessions=session_manager.get_active_session_count()
+            uptime=time.time() - start_time
         )
     except Exception as e:
         logger.error(f"Health check failed: {e}")
@@ -120,8 +126,8 @@ async def create_session(request: CreateSessionRequest = None):
         
         return SessionResponse(
             session_id=session_id,
-            status="created",
-            message="Session created successfully"
+            created_at=datetime.now().isoformat(),
+            status="active"
         )
     except Exception as e:
         logger.error(f"Failed to create session: {e}")
@@ -137,8 +143,8 @@ async def get_session(session_id: str):
         
         return SessionResponse(
             session_id=session_id,
-            status=session_info.get("status", "active"),
-            message="Session found"
+            created_at=session_info.get("created_at", datetime.now().isoformat()),
+            status=session_info.get("status", "active")
         )
     except HTTPException:
         raise
@@ -177,7 +183,8 @@ async def send_text_message(session_id: str, request: TextMessageRequest):
         
         return {
             "message": "Text processed successfully",
-            "response": result.get("text_response", ""),
+            "transcribed_text": request.text,
+            "response_text": result.get("response_text", ""),
             "audio_data": result.get("audio_data"),  # Base64 encoded
             "video_frames": result.get("video_frames", [])  # List of base64 encoded frames
         }
@@ -186,6 +193,35 @@ async def send_text_message(session_id: str, request: TextMessageRequest):
     except Exception as e:
         logger.error(f"Failed to process text for session {session_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to process text")
+
+# Audio message endpoint
+@app.post("/api/v1/sessions/{session_id}/audio")
+async def send_audio_message(session_id: str, audio: UploadFile = File(...)):
+    """Send an audio message to the session"""
+    try:
+        # Verify session exists
+        session_info = await session_manager.get_session(session_id)
+        if not session_info:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Read audio data
+        audio_data = await audio.read()
+        
+        # Process audio through pipeline
+        result = await pipeline_service.process_audio(audio_data, session_id)
+        
+        return {
+            "message": "Audio processed successfully",
+            "transcribed_text": result.get("transcribed_text", ""),
+            "response_text": result.get("response_text", ""),
+            "audio_data": result.get("audio_data"),  # Base64 encoded
+            "video_frames": result.get("video_frames", [])  # List of base64 encoded frames
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to process audio for session {session_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process audio")
 
 # WebSocket endpoint for real-time communication
 @app.websocket("/api/v1/sessions/{session_id}/ws")

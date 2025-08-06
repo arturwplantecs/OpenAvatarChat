@@ -1,0 +1,62 @@
+# Configuration for OpenAvatarChat API
+# Copy of chat_with_faster_whisper_stable.yaml optimized for API usage
+
+default:
+  logger:
+    log_level: "INFO"
+  service:
+    host: "127.0.0.1"
+    port: 8000
+    cert_file: "ssl_certs/localhost.crt"
+    cert_key: "ssl_certs/localhost.key"
+  chat_engine:
+    model_root: "models"
+    handler_search_path:
+      - "src/handlers"
+    handler_configs:
+      SileroVad:
+        module: vad/silerovad/vad_handler_silero
+        speaking_threshold: 0.5
+        start_delay: 2048
+        end_delay: 5000
+        buffer_look_back: 5000
+        speech_padding: 512
+      FasterWhisper:
+        enabled: True
+        module: asr/faster_whisper/handler
+        model_size: "large-v3"  # Maximum accuracy model
+        language: "pl"  # Polish language
+        device: "cuda"  # GPU for maximum accuracy
+        compute_type: "float16"  # Use float16 for GPU
+        
+        # Accuracy-focused settings (prioritizing accuracy over speed)
+        beam_size: 10  # Higher beam size for better accuracy (default: 5)
+        best_of: 10  # More candidates to consider (default: 5)
+        patience: 2.0  # Higher patience for thorough search (default: 1.0)
+        temperature: 0.0  # Deterministic output (no randomness)
+        
+      PiperTTS:
+        enabled: True
+        module: tts/pipertts/tts_handler_pipertts
+        model_path: "models/piper/pl_PL-gosia-medium.onnx"
+        config_path: "models/piper/pl_PL-gosia-medium.onnx.json"
+        sample_rate: 24000  # Match LiteAvatar's expected sample rate for minimal resampling
+        speaker_id: null  # Set to specific speaker ID if multi-speaker model
+        length_scale: 1.0  # 1.0 = normal speech pace
+        noise_scale: 0.1  # Very low voice variation for stable voice (0.0-1.0)
+        noise_w: 0.1  # Very low phoneme variation for cleaner voice (0.0-1.0)
+      LLM_Bailian:
+        enabled: True
+        module: llm/openai_compatible/llm_handler_openai_compatible
+        model_name: "gpt-4o-mini"
+        enable_video_input: True # ensure your llm support video input
+        system_prompt: "You are QUARI. Always respond in Polish. Be helpful and conversational. IMPORTANT: Only describe what you see in images when explicitly asked questions like 'co widzisz?', 'opisz obraz', 'co jest na zdjęciu'. For ALL other questions and conversation, ignore any images and respond normally. Examples: 'Jak masz na imię?' = 'Jestem QUARI', not about images. Make sure answer is suitable for text to speech synthesis, so don't do list like '1 Mercury, 2 Venus' do 'Mercury, Venus' etc. This applies to everything. Write numbers as words, like 'dwa' instead of '2'."
+        api_url: "https://api.openai.com/v1"
+        api_key: "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"
+      LiteAvatar:
+        module: avatar/liteavatar/avatar_handler_liteavatar
+        avatar_name: 20250408/P1-hDQRxa5xfpZK-1yDX8PrQ
+        fps: 25
+        debug: false
+        enable_fast_mode: true  # Enable fast mode for GPU acceleration
+        use_gpu: true  # Enable GPU for maximum speed

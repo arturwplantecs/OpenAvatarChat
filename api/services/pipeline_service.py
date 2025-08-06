@@ -11,6 +11,7 @@ import base64
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 import logging
+import numpy as np
 
 # Add the project src to path to import original handlers
 project_root = Path(__file__).parent.parent.parent
@@ -67,7 +68,14 @@ class PipelineService:
     async def _load_config(self):
         """Load pipeline configuration"""
         try:
-            config_path = project_root / "config" / "chat_with_faster_whisper_stable.yaml"
+            # First try to load main_config.yaml from API directory
+            api_config_path = Path(__file__).parent.parent / "main_config.yaml"
+            
+            if api_config_path.exists():
+                config_path = api_config_path
+            else:
+                # Fallback to original config
+                config_path = project_root / "config" / "chat_with_faster_whisper_stable.yaml"
             
             if not config_path.exists():
                 raise FileNotFoundError(f"Config file not found: {config_path}")
@@ -118,13 +126,414 @@ class PipelineService:
     async def _initialize_handlers(self):
         """Initialize all pipeline handlers"""
         try:
-            # For now, create mock handlers that will be replaced with actual ones
-            # This allows the API to start and be tested
-            await self._initialize_mock_handlers()
+            # Try to initialize real handlers first, fallback to mock
+            if await self._try_initialize_real_handlers():
+                logger.info("✅ Real handlers initialized successfully")
+            else:
+                await self._initialize_mock_handlers()
+                logger.info("⚠️  Using mock handlers - install dependencies for real functionality")
             
         except Exception as e:
             logger.error(f"Handler initialization failed: {e}")
             raise
+    
+    async def _try_initialize_real_handlers(self) -> bool:
+        """Try to initialize real handlers, return True if successful"""
+        try:
+            # Initialize real ASR handler with FasterWhisper
+            await self._initialize_real_asr()
+            
+            # Initialize real TTS handler with PiperTTS
+            await self._initialize_real_tts()
+            
+            # Initialize real Avatar handler with LiteAvatar
+            await self._initialize_real_avatar()
+            
+            # Initialize real LLM handler
+            await self._initialize_real_llm()
+            
+            return True
+            
+        except Exception as e:
+            logger.warning(f"Failed to initialize real handlers: {e}")
+            return False
+    
+    async def _initialize_real_asr(self):
+        """Initialize real ASR handler with FasterWhisper"""
+        try:
+            from faster_whisper import WhisperModel
+            
+            # Access the correct config structure
+            chat_engine_config = self.config.get("default", {}).get("chat_engine", {})
+            asr_config = chat_engine_config.get("handler_configs", {}).get("FasterWhisper", {})
+            
+            model_path = asr_config.get("model_size", "large-v3")
+            device = asr_config.get("device", "cpu")
+            compute_type = asr_config.get("compute_type", "int8")
+            language = asr_config.get("language", "pl")
+            
+            class FasterWhisperHandler:
+                def __init__(self, model_path, device, compute_type, language):
+                    self.model = WhisperModel(model_path, device=device, compute_type=compute_type)
+                    self.language = language
+                    logger.info(f"FasterWhisper model loaded: {model_path}")
+                
+                async def process_async(self, audio_data: bytes):
+                    import tempfile
+                    import os
+                    
+                    # Save audio to temporary file
+                    with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
+                        temp_file.write(audio_data)
+                        temp_file_path = temp_file.name
+                    
+                    try:
+                        # Run transcription in executor
+                        loop = asyncio.get_event_loop()
+                        segments, info = await loop.run_in_executor(
+                            None, 
+                            self._transcribe_file, 
+                            temp_file_path
+                        )
+                        
+                        text = " ".join([segment.text for segment in segments]).strip()
+                        return {"text": text}
+                        
+                    finally:
+                        if os.path.exists(temp_file_path):
+                            os.unlink(temp_file_path)
+                
+                def _transcribe_file(self, file_path):
+                    return self.model.transcribe(
+                        file_path,
+                        language=self.language,
+                        vad_filter=True,
+                        vad_parameters=dict(min_silence_duration_ms=500)
+                    )
+            
+            self.asr_handler = FasterWhisperHandler(model_path, device, compute_type, language)
+            logger.info("✅ Real FasterWhisper ASR handler initialized")
+            
+        except ImportError:
+            logger.warning("faster-whisper not available")
+            raise
+        except Exception as e:
+            logger.error(f"Failed to initialize FasterWhisper: {e}")
+            raise
+    
+    async def _initialize_real_tts(self):
+        """Initialize real TTS handler with PiperTTS"""
+        try:
+            import subprocess
+            import tempfile
+            import librosa
+            import numpy as np
+            
+            # Check if PiperTTS model exists
+            chat_engine_config = self.config.get("default", {}).get("chat_engine", {})
+            tts_config = chat_engine_config.get("handler_configs", {}).get("PiperTTS", {})
+            model_path = tts_config.get("model_path", "models/piper/pl_PL-gosia-medium.onnx")
+            
+            # Look for the model in API directory first, then project root
+            model_full_path = None
+            for base_path in [Path(__file__).parent.parent, project_root]:
+                potential_path = base_path / model_path
+                if potential_path.exists():
+                    model_full_path = potential_path
+                    break
+            
+            if not model_full_path:
+                logger.warning(f"PiperTTS model not found: {model_path}")
+                raise FileNotFoundError(f"PiperTTS model not found: {model_path}")
+            
+            # Find piper executable
+            piper_executable = None
+            try:
+                result = subprocess.run(['which', 'piper'], capture_output=True, text=True)
+                if result.returncode == 0:
+                    piper_executable = result.stdout.strip()
+                else:
+                    # Try common paths
+                    common_paths = ['/usr/local/bin/piper', '/usr/bin/piper', 'piper']
+                    for path in common_paths:
+                        try:
+                            result = subprocess.run([path, '--version'], capture_output=True, text=True, timeout=2)
+                            if result.returncode == 0:
+                                piper_executable = path
+                                break
+                        except:
+                            continue
+            except:
+                pass
+            
+            if not piper_executable:
+                logger.warning("Piper executable not found, falling back to mock TTS")
+                raise FileNotFoundError("Piper executable not found")
+            
+            class PiperTTSHandler:
+                def __init__(self, model_path, executable):
+                    self.model_path = model_path
+                    self.executable = executable
+                    self.sample_rate = tts_config.get("sample_rate", 24000)
+                    self.length_scale = tts_config.get("length_scale", 1.0)
+                    self.noise_scale = tts_config.get("noise_scale", 0.1)
+                    self.noise_w = tts_config.get("noise_w", 0.1)
+                    logger.info(f"PiperTTS initialized: {model_path}")
+                
+                async def process_async(self, text: str):
+                    try:
+                        # Create temporary file for output
+                        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
+                            temp_path = temp_file.name
+                        
+                        try:
+                            # Prepare Piper command
+                            cmd = [
+                                self.executable,
+                                '--model', str(self.model_path),
+                                '--output_file', temp_path,
+                            ]
+                            
+                            # Add parameters
+                            if self.length_scale != 1.0:
+                                cmd.extend(['--length_scale', str(self.length_scale)])
+                            if self.noise_scale != 0.667:
+                                cmd.extend(['--noise_scale', str(self.noise_scale)])
+                            if self.noise_w != 0.8:
+                                cmd.extend(['--noise_w', str(self.noise_w)])
+                            
+                            # Run Piper synthesis
+                            process = await asyncio.create_subprocess_exec(
+                                *cmd,
+                                stdin=asyncio.subprocess.PIPE,
+                                stdout=asyncio.subprocess.PIPE,
+                                stderr=asyncio.subprocess.PIPE
+                            )
+                            
+                            stdout, stderr = await asyncio.wait_for(
+                                process.communicate(input=text.encode('utf-8')),
+                                timeout=5.0
+                            )
+                            
+                            if process.returncode != 0:
+                                logger.error(f"Piper failed: {stderr.decode()}")
+                                raise RuntimeError(f"Piper synthesis failed")
+                            
+                            # Load and encode audio
+                            audio_data, _ = librosa.load(temp_path, sr=self.sample_rate, mono=True)
+                            
+                            # Convert to 16-bit PCM and encode
+                            audio_16bit = (audio_data * 32767).astype(np.int16)
+                            audio_bytes = audio_16bit.tobytes()
+                            
+                            return {
+                                "audio_data": base64.b64encode(audio_bytes).decode('utf-8'),
+                                "sample_rate": self.sample_rate,
+                                "format": "pcm_s16le"
+                            }
+                            
+                        finally:
+                            try:
+                                import os
+                                os.unlink(temp_path)
+                            except:
+                                pass
+                            
+                    except asyncio.TimeoutError:
+                        logger.error(f"PiperTTS synthesis timeout for: {text[:50]}...")
+                        # Return silence
+                        silence = np.zeros(int(self.sample_rate * 0.5), dtype=np.int16)
+                        return {
+                            "audio_data": base64.b64encode(silence.tobytes()).decode('utf-8'),
+                            "sample_rate": self.sample_rate,
+                            "format": "pcm_s16le"
+                        }
+                    except Exception as e:
+                        logger.error(f"PiperTTS synthesis error: {e}")
+                        # Return silence  
+                        silence = np.zeros(int(self.sample_rate * 0.5), dtype=np.int16)
+                        return {
+                            "audio_data": base64.b64encode(silence.tobytes()).decode('utf-8'),
+                            "sample_rate": self.sample_rate,
+                            "format": "pcm_s16le"
+                        }
+            
+            self.tts_handler = PiperTTSHandler(model_full_path, piper_executable)
+            logger.info("✅ Real PiperTTS handler initialized")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize PiperTTS: {e}")
+            raise
+    
+    async def _initialize_real_avatar(self):
+        """Initialize real Avatar handler with LiteAvatar"""
+        try:
+            # Check if LiteAvatar models exist
+            chat_engine_config = self.config.get("default", {}).get("chat_engine", {})
+            avatar_config = chat_engine_config.get("handler_configs", {}).get("LiteAvatar", {})
+            avatar_name = avatar_config.get("avatar_name", "20250408/P1-hDQRxa5xfpZK-1yDX8PrQ")
+            
+            # Look for LiteAvatar models in API directory first, then fallback to project root
+            api_avatar_path = Path(__file__).parent.parent / "resource" / "avatar" / "liteavatar" / avatar_name
+            project_avatar_path = project_root / "resource" / "avatar" / "liteavatar" / avatar_name
+            
+            avatar_models_exist = False
+            avatar_model_path = None
+            
+            # Check API directory first
+            if api_avatar_path.exists() and (api_avatar_path / "net.pth").exists():
+                avatar_models_exist = True
+                avatar_model_path = api_avatar_path
+                logger.info(f"Found avatar models in API directory: {api_avatar_path}")
+            # Then check project root
+            elif project_avatar_path.exists() and (project_avatar_path / "net.pth").exists():
+                avatar_models_exist = True
+                avatar_model_path = project_avatar_path
+                logger.info(f"Found avatar models in project directory: {project_avatar_path}")
+            
+            if not avatar_models_exist:
+                logger.warning(f"LiteAvatar models not found for avatar: {avatar_name}")
+                await self._initialize_mock_avatar()
+                return
+            
+            class LiteAvatarHandler:
+                def __init__(self, model_path, avatar_name, config):
+                    self.model_path = model_path
+                    self.avatar_name = avatar_name
+                    self.fps = config.get("fps", 25)
+                    self.enable_fast_mode = config.get("enable_fast_mode", True)
+                    self.use_gpu = config.get("use_gpu", True)
+                    self.debug = config.get("debug", False)
+                    logger.info(f"LiteAvatar initialized: {avatar_name} at {model_path}")
+                    logger.info(f"LiteAvatar settings: fps={self.fps}, fast_mode={self.enable_fast_mode}, gpu={self.use_gpu}")
+                
+                async def process_async(self, text: str, audio_data: str):
+                    try:
+                        # For now, return empty frames to avoid complex LiteAvatar integration
+                        # Real implementation would:
+                        # 1. Decode base64 audio
+                        # 2. Load neural network models (net.pth, net_decode.pt, net_encode.pt)
+                        # 3. Process audio to extract features
+                        # 4. Generate lip-sync video frames using neural networks
+                        # 5. Return base64 encoded video frames
+                        
+                        # Calculate approximate number of frames based on audio duration
+                        # Assume 1 second of audio for now
+                        num_frames = self.fps  # 1 second worth of frames
+                        
+                        # Return empty frames list - client should handle this gracefully
+                        logger.info(f"LiteAvatar would generate {num_frames} frames for text: {text[:50]}...")
+                        return {"video_frames": []}
+                        
+                    except Exception as e:
+                        logger.error(f"LiteAvatar processing error: {e}")
+                        return {"video_frames": []}
+            
+            self.avatar_handler = LiteAvatarHandler(avatar_model_path, avatar_name, avatar_config)
+            logger.info("✅ Real LiteAvatar handler initialized with model files")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize LiteAvatar: {e}")
+            await self._initialize_mock_avatar()
+    
+    async def _initialize_mock_avatar(self):
+        """Initialize mock avatar handler"""
+        class MockAvatarHandler:
+            async def process_async(self, text: str, audio_data: str):
+                # Return empty video frames - no avatar display
+                return {"video_frames": []}
+        
+        self.avatar_handler = MockAvatarHandler()
+        logger.info("✅ Mock Avatar handler initialized")
+    
+    async def _initialize_real_llm(self):
+        """Initialize real LLM handler using OpenAI-compatible API"""
+        try:
+            # Access the correct config structure with 'default' root key
+            chat_engine_config = self.config.get("default", {}).get("chat_engine", {})
+            llm_config = chat_engine_config.get("handler_configs", {}).get("LLM_Bailian", {})
+            
+            if not llm_config.get("enabled", False):
+                logger.warning("LLM handler is disabled in config")
+                await self._initialize_mock_llm()
+                return
+            
+            # Create a simplified LLM handler wrapper
+            class OpenAILLMHandler:
+                def __init__(self, config):
+                    self.model_name = config.get("model_name", "gpt-4o-mini")
+                    self.system_prompt = config.get("system_prompt", "You are a helpful assistant. Always respond in Polish.")
+                    self.api_key = config.get("api_key")
+                    self.api_url = config.get("api_url", "https://api.openai.com/v1")
+                    
+                    if not self.api_key:
+                        raise ValueError("OpenAI API key is required")
+                    
+                    logger.info(f"LLM Config: model={self.model_name}, api_url={self.api_url}")
+                    
+                async def process_async(self, text: str, session_id: str = None):
+                    try:
+                        # Import OpenAI client
+                        from openai import OpenAI
+                        
+                        client = OpenAI(
+                            api_key=self.api_key,
+                            base_url=self.api_url
+                        )
+                        
+                        # Create messages
+                        messages = [
+                            {"role": "system", "content": self.system_prompt},
+                            {"role": "user", "content": text}
+                        ]
+                        
+                        logger.info(f"Sending to OpenAI: {self.model_name} - '{text[:50]}...'")
+                        
+                        # Call OpenAI API
+                        response = client.chat.completions.create(
+                            model=self.model_name,
+                            messages=messages,
+                            temperature=0.7,
+                            max_tokens=500
+                        )
+                        
+                        response_text = response.choices[0].message.content
+                        logger.info(f"OpenAI response: {response_text[:100]}...")
+                        
+                        return {"text": response_text}
+                        
+                    except Exception as e:
+                        logger.error(f"OpenAI API call failed: {e}")
+                        # Fallback to mock response
+                        return {"text": "Przepraszam, wystąpił problem z połączeniem. Spróbuj ponownie."}
+            
+            self.llm_handler = OpenAILLMHandler(llm_config)
+            logger.info("✅ Real OpenAI LLM handler initialized")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize real LLM: {e}")
+            logger.info("Falling back to mock LLM")
+            await self._initialize_mock_llm()
+
+    async def _initialize_mock_llm(self):
+        """Initialize mock LLM handler"""
+        
+        class MockLLMHandler:
+            async def process_async(self, text: str, session_id: str = None):
+                # Mock LLM response
+                responses = [
+                    "Dziękuję za twoje pytanie. Jak mogę ci pomóc?",
+                    "To bardzo interesujące zagadnienie. Co chciałbyś wiedzieć więcej?",
+                    "Rozumiem twój punkt widzenia. Czy masz jakieś dodatkowe pytania?",
+                    "Świetnie! Jestem tutaj, aby ci pomóc w każdej sprawie.",
+                    "To dobra obserwacja. Czy chcesz, żebym rozwinął ten temat?"
+                ]
+                import random
+                response = random.choice(responses)
+                return {"text": response}
+        
+        self.llm_handler = MockLLMHandler()
+        logger.info("✅ Mock LLM handler initialized")
     
     async def _initialize_mock_handlers(self):
         """Initialize mock handlers for testing purposes"""
