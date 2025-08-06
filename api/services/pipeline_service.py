@@ -514,24 +514,41 @@ class PipelineService:
                     
                     try:
                         video_frames = []
-                        idle_param = self.lite_avatar.get_idle_param()
+                        idle_param = self.lite_avatar.get_idle_param()  # Neutral facial expression
                         
-                        # Generate multiple idle frames with slight variations
+                        # Create a background frame counter for natural idle animation
+                        total_bg_frames = len(self.lite_avatar.ref_img_list)
+                        bg_counter = 0
+                        increase_bg = True
+                        step = 1  # Slow movement for natural breathing
+                        
+                        # Generate idle frames with cycling background (natural breathing/blinking)
                         for i in range(num_frames):
-                            bg_frame_id = i % len(self.lite_avatar.ref_img_list)
+                            # Calculate background frame ID with ping-pong pattern for natural movement
+                            bg_frame_id = bg_counter % total_bg_frames
                             
-                            # Generate idle frame
+                            # Update counter with ping-pong motion (forward/backward)
+                            if increase_bg:
+                                bg_counter += step
+                                if bg_counter >= total_bg_frames - 1:
+                                    increase_bg = False
+                            else:
+                                bg_counter -= step
+                                if bg_counter <= 0:
+                                    increase_bg = True
+                            
+                            # Generate idle frame with neutral expression but varying background
                             mouth_img = self.lite_avatar.param2img(idle_param, bg_frame_id)
                             full_img, _ = self.lite_avatar.merge_mouth_to_bg(mouth_img, bg_frame_id)
                             
                             # Convert to base64
                             import cv2
                             import base64
-                            _, buffer = cv2.imencode('.jpg', full_img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                            _, buffer = cv2.imencode('.jpg', full_img, [cv2.IMWRITE_JPEG_QUALITY, 90])
                             frame_b64 = base64.b64encode(buffer).decode('utf-8')
                             video_frames.append(frame_b64)
                         
-                        logger.info(f"✅ Generated {len(video_frames)} idle avatar frames")
+                        logger.info(f"✅ Generated {len(video_frames)} natural idle avatar frames")
                         return {"video_frames": video_frames}
                         
                     except Exception as e:

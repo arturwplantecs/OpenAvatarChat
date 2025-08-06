@@ -21,17 +21,38 @@ class AvatarManager {
         try {
             this.canvasContext = this.avatarCanvas.getContext('2d');
             
-            // Set canvas size to match container
+            // Set canvas size to match avatar video format (9:16 aspect ratio, 1024x1408)
             const resizeCanvas = () => {
                 const rect = this.avatarContainer.getBoundingClientRect();
-                this.avatarCanvas.width = rect.width;
-                this.avatarCanvas.height = rect.height;
+                const containerWidth = rect.width - 48; // Account for padding
+                const containerHeight = rect.height - 48;
+                
+                // Calculate size to fit 9:16 aspect ratio within container
+                const targetAspectRatio = 9 / 16; // width / height
+                let canvasWidth, canvasHeight;
+                
+                if (containerWidth / containerHeight > targetAspectRatio) {
+                    // Container is wider than needed, fit to height
+                    canvasHeight = containerHeight;
+                    canvasWidth = canvasHeight * targetAspectRatio;
+                } else {
+                    // Container is taller than needed, fit to width
+                    canvasWidth = containerWidth;
+                    canvasHeight = canvasWidth / targetAspectRatio;
+                }
+                
+                this.avatarCanvas.width = canvasWidth;
+                this.avatarCanvas.height = canvasHeight;
+                this.avatarCanvas.style.width = `${canvasWidth}px`;
+                this.avatarCanvas.style.height = `${canvasHeight}px`;
+                
+                console.log(`Canvas resized to: ${canvasWidth}x${canvasHeight} (9:16 aspect ratio)`);
             };
             
             resizeCanvas();
             window.addEventListener('resize', resizeCanvas);
             
-            console.log('Avatar canvas initialized');
+            console.log('Avatar canvas initialized with 9:16 aspect ratio');
         } catch (error) {
             console.error('Failed to initialize avatar canvas:', error);
         }
@@ -81,24 +102,24 @@ class AvatarManager {
         this.avatarCanvas.style.display = 'none';
     }
     
-    async playVideoFrames(frames) {
+    async playVideoFrames(frames, isIdleLoop = false) {
         if (!frames || frames.length === 0) {
-            console.log('No video frames to play');
-            this.showPlaceholder();
+            console.log('No video frames to play, continuing idle animation');
             return;
         }
         
         try {
             this.currentFrames = frames;
             this.frameIndex = 0;
+            this.isIdleLoop = isIdleLoop;
             this.showCanvas();
             
-            this.updateStatus('Odtwarzanie animacji...');
+            // Don't update status - let video play uninterrupted
             this.startFrameAnimation();
             
         } catch (error) {
             console.error('Failed to play video frames:', error);
-            this.showPlaceholder();
+            // Don't fall back to placeholder, just continue current animation
         }
     }
     
@@ -110,17 +131,37 @@ class AvatarManager {
         const frameDelay = 1000 / this.fps; // ms per frame
         let lastFrameTime = 0;
         
+        // Initialize ping-pong direction for idle loops
+        if (this.isIdleLoop && this.pingPongDirection === undefined) {
+            this.pingPongDirection = 1; // 1 = forward, -1 = backward
+        }
+        
         const animate = (currentTime) => {
             if (currentTime - lastFrameTime >= frameDelay) {
                 this.renderFrame();
                 lastFrameTime = currentTime;
                 
-                this.frameIndex++;
-                if (this.frameIndex >= this.currentFrames.length) {
-                    // Loop animation or stop
-                    this.frameIndex = 0;
-                    this.stopAnimation();
-                    return;
+                if (this.isIdleLoop) {
+                    // Ping-pong animation for idle frames
+                    this.frameIndex += this.pingPongDirection;
+                    
+                    // Reverse direction at boundaries
+                    if (this.frameIndex >= this.currentFrames.length - 1) {
+                        this.pingPongDirection = -1;
+                        this.frameIndex = this.currentFrames.length - 1;
+                    } else if (this.frameIndex <= 0) {
+                        this.pingPongDirection = 1;
+                        this.frameIndex = 0;
+                    }
+                } else {
+                    // Normal forward playback for speech/response frames
+                    this.frameIndex++;
+                    if (this.frameIndex >= this.currentFrames.length) {
+                        // Animation completed - return to idle frames automatically
+                        this.frameIndex = 0;
+                        this.stopAnimation();
+                        return;
+                    }
                 }
             }
             
@@ -138,14 +179,16 @@ class AvatarManager {
         }
         
         this.isPlaying = false;
-        this.updateStatus('Avatar gotowy');
+        this.isIdleLoop = false;
+        this.pingPongDirection = undefined;
         
-        // Return to placeholder after animation
+        // Automatically return to idle animation after speaking
+        // Don't show placeholder - maintain video flow
         setTimeout(() => {
-            if (!this.isPlaying) {
-                this.showPlaceholder();
+            if (!this.isPlaying && this.idleFrames && this.idleFrames.length > 0) {
+                this.playVideoFrames(this.idleFrames, true); // Set as idle loop
             }
-        }, 500);
+        }, 100);
     }
     
     renderFrame() {

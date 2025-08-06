@@ -159,17 +159,28 @@ body {
 .avatar-container {
     background: var(--bg-primary);
     border-radius: var(--border-radius-lg);
-    padding: var(--spacing-xl);
+    padding: var(--spacing-md);  /* Reduced padding for more space */
     box-shadow: var(--shadow-lg);
     position: relative;
-    aspect-ratio: 16/9;
+    aspect-ratio: 9/16;  /* Fixed to match original avatar dimensions (1024x1408) */
     overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 300px;
+    min-height: 500px;  /* Increased minimum height */
+    max-height: 90vh;   /* Use most of the viewport height */
+    height: 90vh;       /* Use 90% of viewport height */
     border: 3px solid var(--primary-color);
     background: linear-gradient(45deg, #f8fafc 0%, #e2e8f0 100%);
+}
+
+/* Force 9:16 aspect ratio for avatar canvas */
+#avatarCanvas {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    aspect-ratio: 9/16 !important;
+    border-radius: var(--border-radius);
 }
 
 .avatar-placeholder {

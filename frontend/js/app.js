@@ -310,25 +310,23 @@ class OpenAvatarChatApp {
         try {
             // Request idle avatar frames from the API
             const response = await apiClient.sendMessage('', {
-                getIdleFrames: true,
-                frameCount: 60  // 2.4 seconds at 25fps
+                get_idle_frames: true,  // Fixed: use snake_case to match backend
+                frame_count: 60  // 2.4 seconds at 25fps
             });
             
             if (response && response.video_frames && response.video_frames.length > 0) {
                 console.log(`Loaded ${response.video_frames.length} idle avatar frames`);
                 
-                // Start playing idle frames in a loop
-                await avatarManager.playVideoFrames(response.video_frames);
+                // Start playing idle frames in ping-pong loop
+                avatarManager.idleFrames = response.video_frames;
+                avatarManager.playVideoFrames(response.video_frames, true); // Set as idle loop
                 
-                // Set up continuous idle loop
-                this.setupIdleLoop(response.video_frames);
             } else {
                 console.log('No idle frames received from API');
-                avatarManager.resetToIdle();
+                console.log('Response:', response);
             }
         } catch (error) {
             console.error('Failed to load idle avatar frames:', error);
-            avatarManager.resetToIdle();
         }
     }
     
