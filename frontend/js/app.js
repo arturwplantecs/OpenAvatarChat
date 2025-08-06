@@ -108,6 +108,12 @@ class OpenAvatarChatApp {
             this.updateConnectionStatus('connected', 'Połączono');
             this.updateAIStatus('AI gotowy');
             
+            // Load idle avatar frames
+            if (config.get('avatarEnabled')) {
+                this.updateLoadingText('Ładowanie avatara...');
+                await this.loadIdleAvatarFrames();
+            }
+            
             // Request microphone permission if voice is enabled
             if (config.get('voiceEnabled')) {
                 this.updateLoadingText('Inicjalizacja mikrofonu...');
@@ -298,6 +304,48 @@ class OpenAvatarChatApp {
         
         // Update voice button state
         this.voiceButton.style.display = config.get('voiceEnabled') ? 'flex' : 'none';
+    }
+    
+    async loadIdleAvatarFrames() {
+        try {
+            // Request idle avatar frames from the API
+            const response = await apiClient.sendMessage('', {
+                getIdleFrames: true,
+                frameCount: 60  // 2.4 seconds at 25fps
+            });
+            
+            if (response && response.video_frames && response.video_frames.length > 0) {
+                console.log(`Loaded ${response.video_frames.length} idle avatar frames`);
+                
+                // Start playing idle frames in a loop
+                await avatarManager.playVideoFrames(response.video_frames);
+                
+                // Set up continuous idle loop
+                this.setupIdleLoop(response.video_frames);
+            } else {
+                console.log('No idle frames received from API');
+                avatarManager.resetToIdle();
+            }
+        } catch (error) {
+            console.error('Failed to load idle avatar frames:', error);
+            avatarManager.resetToIdle();
+        }
+    }
+    
+    setupIdleLoop(idleFrames) {
+        // Store idle frames for continuous playback
+        avatarManager.idleFrames = idleFrames;
+        
+        // Set up interval to restart idle animation
+        if (avatarManager.idleInterval) {
+            clearInterval(avatarManager.idleInterval);
+        }
+        
+        avatarManager.idleInterval = setInterval(() => {
+            if (!avatarManager.isPlaying && config.get('avatarEnabled')) {
+                avatarManager.playVideoFrames(idleFrames);
+            }
+        }, 3000); // Restart every 3 seconds when not playing other animations
     }
     
     async cleanup() {

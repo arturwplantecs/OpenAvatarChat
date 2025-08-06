@@ -178,6 +178,18 @@ async def send_text_message(session_id: str, request: TextMessageRequest):
         if not session_info:
             raise HTTPException(status_code=404, detail="Session not found")
         
+        # Handle idle frame requests
+        if request.get_idle_frames:
+            logger.info(f"🎭 Generating {request.frame_count} idle avatar frames for session {session_id}")
+            idle_frames = await pipeline_service.generate_idle_frames(request.frame_count)
+            return {
+                "message": "Idle frames generated successfully",
+                "transcribed_text": "",
+                "response_text": "",
+                "audio_data": None,
+                "video_frames": idle_frames.get("video_frames", [])
+            }
+        
         # Process text through pipeline
         result = await pipeline_service.process_text(request.text, session_id)
         

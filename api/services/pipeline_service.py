@@ -404,29 +404,138 @@ class PipelineService:
                     self.enable_fast_mode = config.get("enable_fast_mode", True)
                     self.use_gpu = config.get("use_gpu", True)
                     self.debug = config.get("debug", False)
+                    self.lite_avatar = None
+                    self.is_initialized = False
+                    
                     logger.info(f"LiteAvatar initialized: {avatar_name} at {model_path}")
                     logger.info(f"LiteAvatar settings: fps={self.fps}, fast_mode={self.enable_fast_mode}, gpu={self.use_gpu}")
+                    
+                    # Initialize the avatar neural networks
+                    self._initialize_avatar()
+                
+                def _initialize_avatar(self):
+                    """Initialize the LiteAvatar neural network"""
+                    try:
+                        # Import the LiteAvatar class
+                        import sys
+                        import os
+                        algo_path = Path(__file__).parent.parent / "handlers" / "avatar" / "liteavatar" / "algo" / "liteavatar"
+                        if not algo_path.exists():
+                            # Fallback to src directory
+                            project_root = Path(__file__).parent.parent.parent
+                            algo_path = project_root / "src" / "handlers" / "avatar" / "liteavatar" / "algo" / "liteavatar"
+                        
+                        # Change to the algo directory (required for relative paths in LiteAvatar)
+                        original_cwd = os.getcwd()
+                        sys.path.insert(0, str(algo_path))
+                        os.chdir(str(algo_path))
+                        
+                        logger.info(f"Changed working directory to: {os.getcwd()}")
+                        
+                        from lite_avatar import liteAvatar
+                        
+                        # Initialize with the model data directory
+                        self.lite_avatar = liteAvatar(
+                            data_dir=str(self.model_path),
+                            fps=self.fps,
+                            use_gpu=self.use_gpu
+                        )
+                        
+                        # Load the dynamic model (neural networks)
+                        self.lite_avatar.load_dynamic_model(str(self.model_path))
+                        self.is_initialized = True
+                        
+                        # Change back to original directory
+                        os.chdir(original_cwd)
+                        
+                        logger.info(f"✅ LiteAvatar neural network loaded successfully from {self.model_path}")
+                        
+                    except Exception as e:
+                        logger.error(f"❌ Failed to initialize LiteAvatar: {e}")
+                        logger.exception("Full traceback:")
+                        # Change back to original directory on error
+                        if 'original_cwd' in locals():
+                            os.chdir(original_cwd)
+                        self.is_initialized = False
                 
                 async def process_async(self, text: str, audio_data: str):
                     try:
-                        # For now, return empty frames to avoid complex LiteAvatar integration
-                        # Real implementation would:
-                        # 1. Decode base64 audio
-                        # 2. Load neural network models (net.pth, net_decode.pt, net_encode.pt)
-                        # 3. Process audio to extract features
-                        # 4. Generate lip-sync video frames using neural networks
-                        # 5. Return base64 encoded video frames
+                        if not self.is_initialized or not self.lite_avatar:
+                            logger.warning("LiteAvatar not initialized, generating idle frames")
+                            return await self._generate_idle_frames()
                         
-                        # Calculate approximate number of frames based on audio duration
-                        # Assume 1 second of audio for now
-                        num_frames = self.fps  # 1 second worth of frames
+                        # Decode base64 audio
+                        import base64
+                        try:
+                            audio_bytes = base64.b64decode(audio_data)
+                        except:
+                            logger.error("Failed to decode audio data")
+                            return await self._generate_idle_frames()
                         
-                        # Return empty frames list - client should handle this gracefully
-                        logger.info(f"LiteAvatar would generate {num_frames} frames for text: {text[:50]}...")
-                        return {"video_frames": []}
+                        # Process audio through neural network to get facial parameters
+                        param_res = self.lite_avatar.audio2param(
+                            input_audio_byte=audio_bytes,
+                            prefix_padding_size=0,
+                            is_complete=True
+                        )
+                        
+                        video_frames = []
+                        
+                        # Generate video frames from parameters
+                        for i, param in enumerate(param_res):
+                            # Calculate background frame ID (cycling through background frames)
+                            bg_frame_id = i % len(self.lite_avatar.ref_img_list)
+                            
+                            # Generate mouth image from neural network
+                            mouth_img = self.lite_avatar.param2img(param, bg_frame_id)
+                            
+                            # Merge mouth with background to create full avatar frame
+                            full_img, _ = self.lite_avatar.merge_mouth_to_bg(mouth_img, bg_frame_id)
+                            
+                            # Convert frame to base64
+                            import cv2
+                            import base64
+                            _, buffer = cv2.imencode('.jpg', full_img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                            frame_b64 = base64.b64encode(buffer).decode('utf-8')
+                            video_frames.append(frame_b64)
+                        
+                        logger.info(f"✅ Generated {len(video_frames)} real avatar frames for text: {text[:50]}...")
+                        return {"video_frames": video_frames}
                         
                     except Exception as e:
-                        logger.error(f"LiteAvatar processing error: {e}")
+                        logger.error(f"❌ LiteAvatar processing error: {e}")
+                        logger.exception("Full traceback:")
+                        return await self._generate_idle_frames()
+                
+                async def _generate_idle_frames(self, num_frames: int = 30):
+                    """Generate idle avatar frames when no audio or as fallback"""
+                    if not self.is_initialized or not self.lite_avatar:
+                        return {"video_frames": []}
+                    
+                    try:
+                        video_frames = []
+                        idle_param = self.lite_avatar.get_idle_param()
+                        
+                        # Generate multiple idle frames with slight variations
+                        for i in range(num_frames):
+                            bg_frame_id = i % len(self.lite_avatar.ref_img_list)
+                            
+                            # Generate idle frame
+                            mouth_img = self.lite_avatar.param2img(idle_param, bg_frame_id)
+                            full_img, _ = self.lite_avatar.merge_mouth_to_bg(mouth_img, bg_frame_id)
+                            
+                            # Convert to base64
+                            import cv2
+                            import base64
+                            _, buffer = cv2.imencode('.jpg', full_img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                            frame_b64 = base64.b64encode(buffer).decode('utf-8')
+                            video_frames.append(frame_b64)
+                        
+                        logger.info(f"✅ Generated {len(video_frames)} idle avatar frames")
+                        return {"video_frames": video_frames}
+                        
+                    except Exception as e:
+                        logger.error(f"❌ Error generating idle frames: {e}")
                         return {"video_frames": []}
             
             self.avatar_handler = LiteAvatarHandler(avatar_model_path, avatar_name, avatar_config)
@@ -774,6 +883,41 @@ class PipelineService:
             total_successful = self.stats["successful_requests"]
             current_avg = self.stats["avg_processing_time"]
             self.stats["avg_processing_time"] = ((current_avg * (total_successful - 1)) + processing_time) / total_successful
+    
+    async def generate_idle_frames(self, num_frames: int = 30) -> Dict[str, List[str]]:
+        """Generate idle avatar frames for continuous playback"""
+        try:
+            if not self.avatar_handler:
+                logger.warning("Avatar handler not available for idle frames")
+                return {"video_frames": []}
+            
+            logger.info(f"🎭 Generating {num_frames} idle avatar frames...")
+            
+            # Check if avatar handler has _generate_idle_frames method
+            if hasattr(self.avatar_handler, '_generate_idle_frames'):
+                result = await self.avatar_handler._generate_idle_frames(num_frames)
+                logger.info(f"✅ Generated {len(result.get('video_frames', []))} idle frames")
+                return result
+            else:
+                # Fallback: use regular processing with empty text
+                result = await self._process_avatar("", "")
+                
+                # If we got frames, repeat them to reach desired count
+                frames = result.get("video_frames", [])
+                if frames:
+                    # Repeat frames to reach desired count
+                    repeated_frames = []
+                    for i in range(num_frames):
+                        repeated_frames.append(frames[i % len(frames)])
+                    logger.info(f"✅ Generated {len(repeated_frames)} idle frames (repeated)")
+                    return {"video_frames": repeated_frames}
+                else:
+                    logger.warning("No frames generated for idle animation")
+                    return {"video_frames": []}
+                    
+        except Exception as e:
+            logger.error(f"❌ Failed to generate idle frames: {e}")
+            return {"video_frames": []}
     
     async def get_status(self) -> Dict[str, Any]:
         """Get pipeline status"""

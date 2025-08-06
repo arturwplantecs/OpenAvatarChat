@@ -113,6 +113,37 @@ class ApiClient {
         }
     }
     
+    async sendMessage(text, options = {}) {
+        if (!this.sessionId) {
+            throw new Error('No active session');
+        }
+        
+        try {
+            const payload = {
+                text: text,
+                ...options
+            };
+            
+            const response = await fetch(config.getApiEndpoints().sendText(this.sessionId), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Failed to send message: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error('Failed to send message:', error);
+            throw error;
+        }
+    }
+    
     async getPipelineStatus() {
         try {
             const response = await fetch(config.getApiEndpoints().pipelineStatus, {

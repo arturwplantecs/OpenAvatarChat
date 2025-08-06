@@ -16,6 +16,8 @@ class CreateSessionRequest(BaseModel):
 class TextMessageRequest(BaseModel):
     """Request to process text message"""
     text: str
+    get_idle_frames: Optional[bool] = False
+    frame_count: Optional[int] = 30
 
 
 class AudioMessageRequest(BaseModel):
