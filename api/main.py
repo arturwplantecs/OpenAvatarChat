@@ -286,10 +286,42 @@ async def root():
     })
 
 if __name__ == "__main__":
+    import argparse
+    
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='OpenAvatarChat API Backend')
+    parser.add_argument('--port', type=int, default=settings.port, help='Port to run the server on')
+    parser.add_argument('--ssl', action='store_true', help='Enable SSL/HTTPS')
+    parser.add_argument('--host', type=str, default=settings.host, help='Host to bind to')
+    args = parser.parse_args()
+    
+    # Override settings with command line arguments
+    settings.port = args.port
+    settings.host = args.host
+    if args.ssl:
+        settings.enable_ssl = True
+    
+    # SSL configuration
+    ssl_keyfile = None
+    ssl_certfile = None
+    
+    if settings.enable_ssl:
+        ssl_certfile = str(project_root / settings.ssl_cert_path)
+        ssl_keyfile = str(project_root / settings.ssl_key_path)
+        logger.info(f"🔒 SSL enabled with cert: {ssl_certfile}")
+    
+    logger.info(f"🚀 Starting OpenAvatarChat API on {settings.host}:{settings.port}")
+    if settings.enable_ssl:
+        logger.info(f"🔒 HTTPS mode enabled")
+    else:
+        logger.info(f"🔓 HTTP mode (no SSL)")
+        
     uvicorn.run(
         "main:app",
         host=settings.host,
         port=settings.port,
         reload=settings.debug,
-        log_level="info" if not settings.debug else "debug"
+        log_level="info" if not settings.debug else "debug",
+        ssl_keyfile=ssl_keyfile,
+        ssl_certfile=ssl_certfile
     )
