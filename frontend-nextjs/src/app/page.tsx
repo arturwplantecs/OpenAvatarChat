@@ -33,6 +33,8 @@ export default function Home() {
   const [idleFrames, setIdleFrames] = useState<string[]>([]);
   const [isIdleLoop, setIsIdleLoop] = useState(false);
   const [showIdlePlaceholder, setShowIdlePlaceholder] = useState(true);
+  const [pingPongDirection, setPingPongDirection] = useState(1); // 1 = forward, -1 = backward
+  const [transitionFrames, setTransitionFrames] = useState(0); // For smooth transitions
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -90,6 +92,18 @@ export default function Home() {
     setCurrentFrameIndex(0);
     setIsIdleLoop(true);
     setIsPlaying(true);
+    setPingPongDirection(1); // Start moving forward
+  }, []);
+
+  // Start idle animation with smooth transition
+  const startIdleAnimationWithTransition = useCallback((frames: string[]) => {
+    setTransitionFrames(3); // 3 frames of transition blending
+    setCurrentVideoFrames(frames);
+    // Start from middle of idle sequence for natural look when returning from speech
+    setCurrentFrameIndex(Math.floor(frames.length / 2));
+    setIsIdleLoop(true);
+    setIsPlaying(true);
+    setPingPongDirection(1);
   }, []);
 
   // Initialize session when component mounts
@@ -157,7 +171,7 @@ export default function Home() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // Video rendering with smooth playback
+  // Video rendering with smooth playback and transitions
   const renderFrame = useCallback((frameData: string) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -167,11 +181,23 @@ export default function Home() {
 
     const img = new Image();
     img.onload = () => {
-      // Clear canvas with fade effect
-      ctx.globalAlpha = 0.95;
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.globalAlpha = 1.0;
+      // Handle smooth transitions
+      if (transitionFrames > 0) {
+        // During transition, blend with previous frame
+        const transitionProgress = (3 - transitionFrames + 1) / 3;
+        ctx.globalAlpha = 0.3 + (0.7 * transitionProgress);
+        ctx.globalCompositeOperation = 'source-over';
+        setTransitionFrames(prev => prev - 1);
+      } else {
+        // Normal rendering - avoid full clear for smoother look
+        ctx.globalAlpha = 1.0;
+        ctx.globalCompositeOperation = 'source-over';
+        
+        // Only clear if this is significantly different (e.g., starting new animation)
+        if (currentFrameIndex === 0 && !isIdleLoop) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+      }
 
       // Calculate dimensions to maintain aspect ratio (9:16)
       const aspectRatio = 9 / 16;
@@ -187,11 +213,15 @@ export default function Home() {
       const y = (canvas.height - drawHeight) / 2;
 
       ctx.drawImage(img, x, y, drawWidth, drawHeight);
+      
+      // Reset for next frame
+      ctx.globalAlpha = 1.0;
+      ctx.globalCompositeOperation = 'source-over';
     };
     img.src = `data:image/jpeg;base64,${frameData}`;
-  }, []);
+  }, [currentFrameIndex, isIdleLoop, transitionFrames]);
 
-  // Video animation with proper frame timing and idle loop support
+  // Video animation with ping-pong idle logic and smooth transitions
   useEffect(() => {
     if (currentVideoFrames.length > 0 && isPlaying && currentFrameIndex < currentVideoFrames.length) {
       const playFrames = () => {
@@ -200,22 +230,29 @@ export default function Home() {
         // 25 FPS timing (40ms per frame)
         animationFrameRef.current = window.setTimeout(() => {
           setCurrentFrameIndex(prev => {
-            const nextIndex = prev + 1;
-            
             if (isIdleLoop) {
-              // For idle animation, loop continuously
-              if (nextIndex >= currentVideoFrames.length) {
-                return 0; // Loop back to start
+              // Ping-pong animation for idle frames
+              const nextIndex = prev + pingPongDirection;
+              
+              // Check boundaries and reverse direction
+              if (nextIndex >= currentVideoFrames.length - 1) {
+                setPingPongDirection(-1);
+                return currentVideoFrames.length - 1;
+              } else if (nextIndex <= 0) {
+                setPingPongDirection(1);
+                return 0;
               }
+              
               return nextIndex;
             } else {
-              // For speech animation, stop at end and return to idle
+              // Normal forward playback for speech animation
+              const nextIndex = prev + 1;
               if (nextIndex >= currentVideoFrames.length) {
-                // Speech animation finished, return to idle
+                // Speech animation finished, return to idle with smooth transition
                 setIsPlaying(false);
                 setTimeout(() => {
                   if (idleFrames.length > 0) {
-                    startIdleAnimation(idleFrames);
+                    startIdleAnimationWithTransition(idleFrames);
                   }
                 }, 100);
                 return 0;
@@ -234,7 +271,7 @@ export default function Home() {
         clearTimeout(animationFrameRef.current);
       }
     };
-  }, [currentVideoFrames, isPlaying, currentFrameIndex, renderFrame, isIdleLoop, idleFrames]);
+  }, [currentVideoFrames, isPlaying, currentFrameIndex, renderFrame, isIdleLoop, idleFrames, pingPongDirection]);
 
   // Canvas setup
   useEffect(() => {
@@ -299,12 +336,22 @@ export default function Home() {
   };
 
   const playVideo = async (frames: string[], audioData?: string) => {
-    // Stop idle animation and start speech animation
+    // Smooth transition from idle to speech
+    const wasIdle = isIdleLoop;
+    
+    // Stop idle animation and start speech animation with transition
     setIsIdleLoop(false);
+    
+    if (wasIdle) {
+      // When transitioning from idle to speech, add smooth transition
+      setTransitionFrames(3);
+    }
+    
     setCurrentVideoFrames(frames);
     setCurrentFrameIndex(0);
     setIsPlaying(true);
     setShowIdlePlaceholder(false);
+    setPingPongDirection(1); // Reset ping-pong direction
 
     if (audioData && isAudioEnabled && audioRef.current) {
       try {
