@@ -18,6 +18,7 @@ class AvatarInitOption(BaseModel):
     debug: bool = False
     enable_fast_mode: bool = False
     use_gpu: bool = True
+    video_resolution: int = 384  # Video resolution for quality/performance trade-off
 
 
 class AudioSlice(BaseModel):

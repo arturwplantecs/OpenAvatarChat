@@ -46,6 +46,30 @@ esac
 
 echo ""
 
+# Video quality selection
+echo -e "${PURPLE}🎬 Choose video quality:${NC}"
+echo "1) High Quality (Better visuals, may be jerky on slower systems)"
+echo "2) Smooth Performance (Lower quality, smoother playback)"
+echo ""
+read -p "Enter your choice (1-2): " quality_choice
+
+case $quality_choice in
+    1)
+        VIDEO_QUALITY="high"
+        echo -e "${GREEN}✨ Using High Quality Video${NC}"
+        ;;
+    2)
+        VIDEO_QUALITY="smooth"
+        echo -e "${GREEN}✨ Using Smooth Performance Video${NC}"
+        ;;
+    *)
+        echo -e "${YELLOW}⚠️  Invalid choice, defaulting to Smooth Performance${NC}"
+        VIDEO_QUALITY="smooth"
+        ;;
+esac
+
+echo ""
+
 # Function to check if port is available
 check_port() {
     if lsof -Pi :$1 -sTCP:LISTEN -t >/dev/null ; then
@@ -111,6 +135,26 @@ else
         echo -e "${BLUE}📍 LD_LIBRARY_PATH: $LD_LIBRARY_PATH${NC}"
     fi
     
+    # Configure video quality settings
+    if [ "$VIDEO_QUALITY" = "smooth" ]; then
+        echo -e "${BLUE}🎬 Configuring for smooth video performance...${NC}"
+        # Create a temporary config with reduced quality settings
+        cp main_config.yaml main_config_backup.yaml
+        
+        # Modify avatar settings for smooth performance
+        sed -i 's/fps: 25/fps: 15/' main_config.yaml
+        sed -i 's/enable_fast_mode: true/enable_fast_mode: false/' main_config.yaml
+        
+        echo -e "${GREEN}✅ Video configured for smooth performance (15 FPS, fast mode disabled)${NC}"
+    else
+        echo -e "${BLUE}🎬 Using high quality video settings...${NC}"
+        # Ensure we have the original high quality settings
+        if [ -f "main_config_backup.yaml" ]; then
+            cp main_config_backup.yaml main_config.yaml
+        fi
+        echo -e "${GREEN}✅ Video configured for high quality (25 FPS, fast mode enabled)${NC}"
+    fi
+    
     cd api
     
     python3 main.py --port 8000 &
@@ -147,6 +191,7 @@ echo -e "${GREEN}🎉 OpenAvatarChat is ready!${NC}"
 echo "=============================================="
 echo -e "${BLUE}📱 Frontend:${NC} http://localhost:$FRONTEND_PORT"
 echo -e "${BLUE}🔧 API Docs:${NC} http://localhost:8000/docs"
+echo -e "${BLUE}🎬 Video Quality:${NC} $( [ "$VIDEO_QUALITY" = "high" ] && echo "High Quality (25 FPS)" || echo "Smooth Performance (15 FPS)" )"
 if [ "$FRONTEND_TYPE" = "nextjs" ]; then
     echo -e "${BLUE}🎨 Frontend Type:${NC} Next.js (Modern React App)"
     echo ""
@@ -193,10 +238,32 @@ echo ""
 
 # Keep script running
 echo -e "${BLUE}Press Ctrl+C to stop all servers and exit${NC}"
+
+# Cleanup function
+cleanup() {
+    echo -e "\n${RED}🛑 Stopping servers...${NC}"
+    pkill -f "main.py"
+    if [ "$FRONTEND_TYPE" = "nextjs" ]; then
+        pkill -f "next"
+    else
+        pkill -f "serve.py"
+    fi
+    
+    # Restore original config if backup exists
+    if [ -f "api/main_config_backup.yaml" ]; then
+        echo -e "${BLUE}� Restoring original configuration...${NC}"
+        cp api/main_config_backup.yaml api/main_config.yaml
+        rm api/main_config_backup.yaml
+        echo -e "${GREEN}✅ Configuration restored${NC}"
+    fi
+    
+    exit
+}
+
 if [ "$FRONTEND_TYPE" = "nextjs" ]; then
-    trap 'echo -e "\n${RED}🛑 Stopping servers...${NC}"; pkill -f "main.py"; pkill -f "next"; exit' INT
+    trap cleanup INT
 else
-    trap 'echo -e "\n${RED}🛑 Stopping servers...${NC}"; pkill -f "main.py"; pkill -f "serve.py"; exit' INT
+    trap cleanup INT
 fi
 while true; do
     sleep 1

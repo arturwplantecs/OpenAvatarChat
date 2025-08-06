@@ -59,7 +59,8 @@ default:
       LiteAvatar:
         module: avatar/liteavatar/avatar_handler_liteavatar
         avatar_name: 20250408/P1-hDQRxa5xfpZK-1yDX8PrQ
-        fps: 25
+        fps: 25  # Back to original 25 FPS for better sync
         debug: false
         enable_fast_mode: true  # Enable fast mode for GPU acceleration
         use_gpu: true  # Enable GPU for maximum speed
+        video_resolution: 128  # Low resolution for maximum performance

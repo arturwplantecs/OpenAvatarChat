@@ -48,6 +48,7 @@ class Tts2FaceConfigModel(HandlerBaseConfigModel, BaseModel):
     fps: int = Field(default=25)
     enable_fast_mode: bool = Field(default=False)
     use_gpu: bool = Field(default=True)
+    video_resolution: int = Field(default=384)  # Video resolution (384 = high quality, 256 = medium, 128 = low)
 
 
 class Tts2FaceOutputHandler(AvatarOutputHandler):
@@ -124,7 +125,8 @@ class AvatarProcessorWrapper:
                 avatar_name=config.avatar_name,
                 debug=config.debug,
                 enable_fast_mode=config.enable_fast_mode,
-                use_gpu=config.use_gpu
+                use_gpu=config.use_gpu,
+                video_resolution=config.video_resolution
             )
         )
         # start event input loop

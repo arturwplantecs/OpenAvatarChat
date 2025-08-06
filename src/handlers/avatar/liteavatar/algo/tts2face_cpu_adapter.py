@@ -36,12 +36,14 @@ class Tts2faceCpuAdapter(BaseAlgoAdapter):
             self.tts2face = liteAvatar(
                 data_dir=data_dir,
                 fps=init_option.video_frame_rate,
-                use_gpu=init_option.use_gpu
+                use_gpu=init_option.use_gpu,
+                video_resolution=init_option.video_resolution
             )
         else:
             self.tts2face = liteAvatar(
                 data_dir=data_dir,
-                fps=init_option.video_frame_rate
+                fps=init_option.video_frame_rate,
+                video_resolution=init_option.video_resolution
             )
         bg_step = self.TARGET_FPS // init_option.video_frame_rate
         self.tts2face.load_dynamic_model(data_dir)
