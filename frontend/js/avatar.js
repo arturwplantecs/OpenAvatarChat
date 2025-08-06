@@ -13,6 +13,11 @@ class AvatarManager {
         this.animationId = null;
         this.fps = 25; // Match API configuration
         
+        // For smooth transitions
+        this.lastRenderedFrame = null;
+        this.previousFrameIndex = -1;
+        this.transitionFrames = 0; // Number of frames to blend during transition
+        
         this.canvasContext = null;
         this.initializeCanvas();
     }
@@ -23,9 +28,10 @@ class AvatarManager {
             
             // Set canvas size to match avatar video format (9:16 aspect ratio, 1024x1408)
             const resizeCanvas = () => {
+                // Force recalculation by getting fresh container bounds
                 const rect = this.avatarContainer.getBoundingClientRect();
-                const containerWidth = rect.width - 48; // Account for padding
-                const containerHeight = rect.height - 48;
+                const containerWidth = rect.width - 16; // Minimal padding for maximum space
+                const containerHeight = rect.height - 16;
                 
                 // Calculate size to fit 9:16 aspect ratio within container
                 const targetAspectRatio = 9 / 16; // width / height
@@ -41,18 +47,52 @@ class AvatarManager {
                     canvasHeight = canvasWidth / targetAspectRatio;
                 }
                 
+                // Ensure minimum size but respect container constraints
+                canvasWidth = Math.max(200, Math.min(canvasWidth, containerWidth));
+                canvasHeight = Math.max(300, Math.min(canvasHeight, containerHeight));
+                
+                // Set canvas internal resolution
                 this.avatarCanvas.width = canvasWidth;
                 this.avatarCanvas.height = canvasHeight;
+                
+                // Force CSS size to match exactly - prevent zoom artifacts
                 this.avatarCanvas.style.width = `${canvasWidth}px`;
                 this.avatarCanvas.style.height = `${canvasHeight}px`;
+                this.avatarCanvas.style.maxWidth = `${containerWidth}px`;
+                this.avatarCanvas.style.maxHeight = `${containerHeight}px`;
                 
-                console.log(`Canvas resized to: ${canvasWidth}x${canvasHeight} (9:16 aspect ratio)`);
+                console.log(`Canvas resized to: ${canvasWidth}x${canvasHeight} (container: ${containerWidth}x${containerHeight})`);
             };
             
-            resizeCanvas();
-            window.addEventListener('resize', resizeCanvas);
+            // Initial resize with a delay to ensure DOM is ready
+            setTimeout(() => {
+                resizeCanvas();
+            }, 100);
             
-            console.log('Avatar canvas initialized with 9:16 aspect ratio');
+            // Resize on window resize with debouncing
+            let resizeTimeout;
+            const debouncedResize = () => {
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(() => {
+                    resizeCanvas();
+                }, 150);
+            };
+            
+            window.addEventListener('resize', debouncedResize);
+            
+            // Also listen for zoom changes
+            window.addEventListener('orientationchange', debouncedResize);
+            
+            // Listen for page visibility changes to fix zoom issues
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden) {
+                    setTimeout(() => {
+                        resizeCanvas();
+                    }, 100);
+                }
+            });
+            
+            console.log('Avatar canvas initialized');
         } catch (error) {
             console.error('Failed to initialize avatar canvas:', error);
         }
@@ -94,6 +134,43 @@ class AvatarManager {
         this.avatarPlaceholder.style.display = 'none';
         this.avatarVideo.style.display = 'none';
         this.avatarCanvas.style.display = 'block';
+        
+        // Force canvas resize when showing to fix zoom issues
+        setTimeout(() => {
+            this.refreshCanvasSize();
+        }, 50);
+    }
+    
+    refreshCanvasSize() {
+        // Manually trigger canvas resize to fix zoom artifacts
+        if (this.avatarContainer && this.avatarCanvas) {
+            const rect = this.avatarContainer.getBoundingClientRect();
+            const containerWidth = rect.width - 16;
+            const containerHeight = rect.height - 16;
+            
+            const targetAspectRatio = 9 / 16;
+            let canvasWidth, canvasHeight;
+            
+            if (containerWidth / containerHeight > targetAspectRatio) {
+                canvasHeight = containerHeight;
+                canvasWidth = canvasHeight * targetAspectRatio;
+            } else {
+                canvasWidth = containerWidth;
+                canvasHeight = canvasWidth / targetAspectRatio;
+            }
+            
+            canvasWidth = Math.max(200, Math.min(canvasWidth, containerWidth));
+            canvasHeight = Math.max(300, Math.min(canvasHeight, containerHeight));
+            
+            this.avatarCanvas.width = canvasWidth;
+            this.avatarCanvas.height = canvasHeight;
+            this.avatarCanvas.style.width = `${canvasWidth}px`;
+            this.avatarCanvas.style.height = `${canvasHeight}px`;
+            this.avatarCanvas.style.maxWidth = `${containerWidth}px`;
+            this.avatarCanvas.style.maxHeight = `${containerHeight}px`;
+            
+            console.log(`Canvas refreshed to: ${canvasWidth}x${canvasHeight}`);
+        }
     }
     
     showVideo() {
@@ -109,10 +186,29 @@ class AvatarManager {
         }
         
         try {
+            // Store previous animation state for smooth transition
+            const wasIdle = this.isIdleLoop;
+            const previousFrames = this.currentFrames;
+            const previousIndex = this.frameIndex;
+            
             this.currentFrames = frames;
-            this.frameIndex = 0;
             this.isIdleLoop = isIdleLoop;
             this.showCanvas();
+            
+            // For smooth transitions: start from a logical frame index
+            if (!isIdleLoop && wasIdle && previousFrames.length > 0) {
+                // When transitioning from idle to speech, start from frame 0
+                this.frameIndex = 0;
+                this.transitionFrames = 3; // Blend first 3 frames for smooth transition
+            } else if (isIdleLoop && !wasIdle) {
+                // When returning to idle, start from middle of idle sequence for natural look
+                this.frameIndex = Math.floor(frames.length / 2);
+                this.transitionFrames = 3; // Blend first 3 frames
+            } else {
+                // Normal case
+                this.frameIndex = 0;
+                this.transitionFrames = 0;
+            }
             
             // Don't update status - let video play uninterrupted
             this.startFrameAnimation();
@@ -202,8 +298,26 @@ class AvatarManager {
             // Decode base64 frame
             const img = new Image();
             img.onload = () => {
-                // Clear canvas
-                this.canvasContext.clearRect(0, 0, this.avatarCanvas.width, this.avatarCanvas.height);
+                // Use smooth rendering instead of clearing
+                if (this.transitionFrames > 0) {
+                    // During transition, blend with previous frame
+                    const transitionProgress = (3 - this.transitionFrames + 1) / 3;
+                    
+                    // Don't clear - draw new frame with calculated opacity
+                    this.canvasContext.globalAlpha = 0.3 + (0.7 * transitionProgress);
+                    this.canvasContext.globalCompositeOperation = 'source-over';
+                    
+                    this.transitionFrames--;
+                } else {
+                    // Normal rendering - still avoid full clear for smoother look
+                    this.canvasContext.globalAlpha = 1.0;
+                    this.canvasContext.globalCompositeOperation = 'source-over';
+                    
+                    // Only clear if this is a significantly different frame
+                    if (this.shouldClearCanvas()) {
+                        this.canvasContext.clearRect(0, 0, this.avatarCanvas.width, this.avatarCanvas.height);
+                    }
+                }
                 
                 // Draw frame to canvas
                 this.canvasContext.drawImage(
@@ -212,6 +326,14 @@ class AvatarManager {
                     this.avatarCanvas.width, 
                     this.avatarCanvas.height
                 );
+                
+                // Reset composite operation for next frame
+                this.canvasContext.globalAlpha = 1.0;
+                this.canvasContext.globalCompositeOperation = 'source-over';
+                
+                // Store this frame for potential future blending
+                this.lastRenderedFrame = frameData;
+                this.previousFrameIndex = this.frameIndex;
             };
             
             img.src = `data:image/jpeg;base64,${frameData}`;
@@ -219,6 +341,15 @@ class AvatarManager {
         } catch (error) {
             console.error('Failed to render frame:', error);
         }
+    }
+    
+    shouldClearCanvas() {
+        // Only clear canvas when switching animation types or starting new sequence
+        if (this.frameIndex === 0 && this.transitionFrames === 0) {
+            return true;
+        }
+        // For continuous animation within same sequence, don't clear
+        return false;
     }
     
     displayThinkingAnimation() {

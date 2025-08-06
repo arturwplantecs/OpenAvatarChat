@@ -67,6 +67,9 @@ async def startup_event():
     """Initialize the application on startup"""
     logger.info("🚀 Starting OpenAvatarChat API Backend")
     
+    # Set session manager in pipeline service for conversation history
+    pipeline_service.session_manager = session_manager
+    
     # Initialize pipeline service
     await pipeline_service.initialize()
     logger.info("✅ Pipeline service initialized")

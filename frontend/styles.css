@@ -140,7 +140,7 @@ body {
 .main-content {
     flex: 1;
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 2fr 1fr; /* Give avatar section 2x more space than chat */
     gap: var(--spacing-xl);
     padding: var(--spacing-xl);
     max-width: 1400px;
@@ -159,7 +159,7 @@ body {
 .avatar-container {
     background: var(--bg-primary);
     border-radius: var(--border-radius-lg);
-    padding: var(--spacing-md);  /* Reduced padding for more space */
+    padding: var(--spacing-sm);  /* Minimal padding for maximum space */
     box-shadow: var(--shadow-lg);
     position: relative;
     aspect-ratio: 9/16;  /* Fixed to match original avatar dimensions (1024x1408) */
@@ -167,20 +167,30 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 500px;  /* Increased minimum height */
-    max-height: 90vh;   /* Use most of the viewport height */
-    height: 90vh;       /* Use 90% of viewport height */
+    min-height: 600px;  /* Increased minimum height */
+    max-height: 95vh;   /* Use almost all viewport height */
+    height: calc(95vh - 40px); /* Account for any margins */
+    width: 100%;        /* Fill available width */
+    max-width: calc((95vh - 40px) * 9/16); /* Maintain aspect ratio */
     border: 3px solid var(--primary-color);
     background: linear-gradient(45deg, #f8fafc 0%, #e2e8f0 100%);
+    /* Prevent zoom scaling issues */
+    box-sizing: border-box;
 }
 
 /* Force 9:16 aspect ratio for avatar canvas */
 #avatarCanvas {
+    width: auto !important;
+    height: auto !important;
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
     aspect-ratio: 9/16 !important;
     border-radius: var(--border-radius);
+    transition: opacity 0.3s ease-in-out; /* Smooth transitions */
+    /* Prevent zoom artifacts */
+    image-rendering: auto;
+    transform-origin: center center;
 }
 
 .avatar-placeholder {

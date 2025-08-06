@@ -28,6 +28,7 @@ class PipelineService:
         self.handlers = {}
         self.is_initialized = False
         self.initialization_time = None
+        self.session_manager = None  # Will be injected from main.py
         
         # Handler instances
         self.vad_handler = None
@@ -597,7 +598,7 @@ class PipelineService:
                     
                     logger.info(f"LLM Config: model={self.model_name}, api_url={self.api_url}")
                     
-                async def process_async(self, text: str, session_id: str = None):
+                async def process_async(self, text: str, session_id: str = None, conversation_history: List[Dict[str, str]] = None):
                     try:
                         # Import OpenAI client
                         from openai import OpenAI
@@ -607,13 +608,18 @@ class PipelineService:
                             base_url=self.api_url
                         )
                         
-                        # Create messages
-                        messages = [
-                            {"role": "system", "content": self.system_prompt},
-                            {"role": "user", "content": text}
-                        ]
+                        # Create messages with conversation history
+                        messages = [{"role": "system", "content": self.system_prompt}]
                         
-                        logger.info(f"Sending to OpenAI: {self.model_name} - '{text[:50]}...'")
+                        # Add conversation history if provided
+                        if conversation_history:
+                            messages.extend(conversation_history)
+                            logger.info(f"💬 Using conversation history: {len(conversation_history)} previous messages")
+                        
+                        # Add current user message
+                        messages.append({"role": "user", "content": text})
+                        
+                        logger.info(f"🧠 Sending to OpenAI: {self.model_name} - '{text[:50]}...' (total messages: {len(messages)})")
                         
                         # Call OpenAI API
                         response = client.chat.completions.create(
@@ -839,14 +845,47 @@ class PipelineService:
             raise
     
     async def _run_llm(self, text: str, session_id: str) -> Dict[str, Any]:
-        """Run Large Language Model"""
+        """Run Large Language Model with conversation history"""
         try:
+            # Add user message to session history
+            if self.session_manager:
+                await self.session_manager.add_message_to_history(
+                    session_id, "user", {"text": text}
+                )
+            
+            # Get conversation history for context
+            conversation_history = []
+            if self.session_manager:
+                history = await self.session_manager.get_conversation_history(session_id, limit=10)
+                # Convert session history to LLM format
+                for msg in history[:-1]:  # Exclude the current message we just added
+                    content = msg.get("content", {})
+                    if msg.get("type") == "user":
+                        conversation_history.append({
+                            "role": "user",
+                            "content": content.get("text", "")
+                        })
+                    elif msg.get("type") == "assistant":
+                        conversation_history.append({
+                            "role": "assistant", 
+                            "content": content.get("text", "")
+                        })
+            
+            # Process with LLM (pass conversation history if supported)
             if hasattr(self.llm_handler, 'process_async'):
-                return await self.llm_handler.process_async(text, session_id)
+                result = await self.llm_handler.process_async(text, session_id, conversation_history)
             else:
-                # Run in thread pool for sync methods
+                # Fallback for handlers that don't support history
                 loop = asyncio.get_event_loop()
-                return await loop.run_in_executor(None, self.llm_handler.process, text)
+                result = await loop.run_in_executor(None, self.llm_handler.process, text)
+            
+            # Add assistant response to session history
+            if self.session_manager and "response_text" in result:
+                await self.session_manager.add_message_to_history(
+                    session_id, "assistant", {"text": result["response_text"]}
+                )
+            
+            return result
         except Exception as e:
             logger.error(f"LLM processing failed: {e}")
             raise
