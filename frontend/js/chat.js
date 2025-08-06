@@ -64,19 +64,24 @@ class ChatManager {
                 // Play avatar video if available and enabled (this includes TTS)
                 if (response.video_frames && response.video_frames.length > 0 && config.get('avatarEnabled')) {
                     try {
-                        // Play video frames which already include synchronized audio
-                        await avatarManager.playVideoFrames(response.video_frames);
-                        
-                        // Play TTS audio simultaneously if available and enabled
+                        // For synchronized playback, start audio and video together
                         if (response.audio_data && config.get('autoSpeak')) {
-                            try {
-                                await audioManager.playTTSAudio(response.audio_data, 24000);
-                            } catch (error) {
-                                console.error('Failed to play TTS audio:', error);
-                            }
+                            // Calculate expected duration from video frames and frame rate
+                            const frameRate = 25; // Match backend FPS
+                            const expectedDuration = response.video_frames.length / frameRate;
+                            
+                            // Start both audio and video simultaneously for perfect sync
+                            const audioPromise = audioManager.playTTSAudio(response.audio_data, 24000);
+                            const videoPromise = avatarManager.playVideoFrames(response.video_frames, false, expectedDuration);
+                            
+                            // Wait for both to complete
+                            await Promise.all([audioPromise, videoPromise]);
+                        } else {
+                            // Video only without audio
+                            await avatarManager.playVideoFrames(response.video_frames);
                         }
                     } catch (error) {
-                        console.error('Failed to play avatar video:', error);
+                        console.error('Failed to play synchronized avatar:', error);
                     }
                 } else {
                     // Fallback: play TTS audio only if no video frames
@@ -131,19 +136,24 @@ class ChatManager {
                 // Play avatar video if available and enabled (this includes TTS)
                 if (response.video_frames && response.video_frames.length > 0 && config.get('avatarEnabled')) {
                     try {
-                        // Play video frames which already include synchronized audio
-                        await avatarManager.playVideoFrames(response.video_frames);
-                        
-                        // Play TTS audio simultaneously if available and enabled
+                        // For synchronized playback, start audio and video together
                         if (response.audio_data && config.get('autoSpeak')) {
-                            try {
-                                await audioManager.playTTSAudio(response.audio_data, 24000);
-                            } catch (error) {
-                                console.error('Failed to play TTS audio:', error);
-                            }
+                            // Calculate expected duration from video frames and frame rate
+                            const frameRate = 25; // Match backend FPS
+                            const expectedDuration = response.video_frames.length / frameRate;
+                            
+                            // Start both audio and video simultaneously for perfect sync
+                            const audioPromise = audioManager.playTTSAudio(response.audio_data, 24000);
+                            const videoPromise = avatarManager.playVideoFrames(response.video_frames, false, expectedDuration);
+                            
+                            // Wait for both to complete
+                            await Promise.all([audioPromise, videoPromise]);
+                        } else {
+                            // Video only without audio
+                            await avatarManager.playVideoFrames(response.video_frames);
                         }
                     } catch (error) {
-                        console.error('Failed to play avatar video:', error);
+                        console.error('Failed to play synchronized avatar:', error);
                     }
                 } else {
                     // Fallback: play TTS audio only if no video frames

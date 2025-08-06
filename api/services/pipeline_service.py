@@ -481,11 +481,29 @@ class PipelineService:
                         )
                         
                         video_frames = []
+                        total_bg_frames = len(self.lite_avatar.ref_img_list)
                         
-                        # Generate video frames from parameters
+                        # Continue background frame cycling from where idle left off
+                        # Use a persistent background counter to avoid resets
+                        if not hasattr(self, 'bg_frame_counter'):
+                            self.bg_frame_counter = 0
+                            self.bg_direction = 1  # 1 for forward, -1 for backward
+                        
+                        # Generate video frames from parameters with continuous background
                         for i, param in enumerate(param_res):
-                            # Calculate background frame ID (cycling through background frames)
-                            bg_frame_id = i % len(self.lite_avatar.ref_img_list)
+                            # Use continuous background frame cycling (no reset)
+                            bg_frame_id = self.bg_frame_counter % total_bg_frames
+                            
+                            # Update background counter with smooth progression
+                            # Slower movement during speech for more natural look
+                            if i % 3 == 0:  # Update background every 3 frames for smoother transition
+                                self.bg_frame_counter += self.bg_direction
+                                if self.bg_frame_counter >= total_bg_frames - 1:
+                                    self.bg_direction = -1
+                                    self.bg_frame_counter = total_bg_frames - 1
+                                elif self.bg_frame_counter <= 0:
+                                    self.bg_direction = 1
+                                    self.bg_frame_counter = 0
                             
                             # Generate mouth image from neural network
                             mouth_img = self.lite_avatar.param2img(param, bg_frame_id)
@@ -516,27 +534,26 @@ class PipelineService:
                     try:
                         video_frames = []
                         idle_param = self.lite_avatar.get_idle_param()  # Neutral facial expression
-                        
-                        # Create a background frame counter for natural idle animation
                         total_bg_frames = len(self.lite_avatar.ref_img_list)
-                        bg_counter = 0
-                        increase_bg = True
-                        step = 1  # Slow movement for natural breathing
                         
-                        # Generate idle frames with cycling background (natural breathing/blinking)
+                        # Initialize or continue background frame counter
+                        if not hasattr(self, 'bg_frame_counter'):
+                            self.bg_frame_counter = 0
+                            self.bg_direction = 1  # 1 for forward, -1 for backward
+                        
+                        # Generate idle frames with continuous background cycling
                         for i in range(num_frames):
-                            # Calculate background frame ID with ping-pong pattern for natural movement
-                            bg_frame_id = bg_counter % total_bg_frames
+                            # Use the same background counter as speech for continuity
+                            bg_frame_id = self.bg_frame_counter % total_bg_frames
                             
-                            # Update counter with ping-pong motion (forward/backward)
-                            if increase_bg:
-                                bg_counter += step
-                                if bg_counter >= total_bg_frames - 1:
-                                    increase_bg = False
-                            else:
-                                bg_counter -= step
-                                if bg_counter <= 0:
-                                    increase_bg = True
+                            # Update counter with ping-pong motion (same as speech)
+                            self.bg_frame_counter += self.bg_direction
+                            if self.bg_frame_counter >= total_bg_frames - 1:
+                                self.bg_direction = -1
+                                self.bg_frame_counter = total_bg_frames - 1
+                            elif self.bg_frame_counter <= 0:
+                                self.bg_direction = 1
+                                self.bg_frame_counter = 0
                             
                             # Generate idle frame with neutral expression but varying background
                             mouth_img = self.lite_avatar.param2img(idle_param, bg_frame_id)

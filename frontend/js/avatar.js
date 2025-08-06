@@ -179,47 +179,57 @@ class AvatarManager {
         this.avatarCanvas.style.display = 'none';
     }
     
-    async playVideoFrames(frames, isIdleLoop = false) {
+    async playVideoFrames(frames, isIdleLoop = false, expectedDuration = null) {
         if (!frames || frames.length === 0) {
             console.log('No video frames to play, continuing idle animation');
             return;
         }
         
-        try {
-            // Store previous animation state for smooth transition
-            const wasIdle = this.isIdleLoop;
-            const previousFrames = this.currentFrames;
-            const previousIndex = this.frameIndex;
-            
-            this.currentFrames = frames;
-            this.isIdleLoop = isIdleLoop;
-            this.showCanvas();
-            
-            // For smooth transitions: start from a logical frame index
-            if (!isIdleLoop && wasIdle && previousFrames.length > 0) {
-                // When transitioning from idle to speech, start from frame 0
-                this.frameIndex = 0;
-                this.transitionFrames = 3; // Blend first 3 frames for smooth transition
-            } else if (isIdleLoop && !wasIdle) {
-                // When returning to idle, start from middle of idle sequence for natural look
-                this.frameIndex = Math.floor(frames.length / 2);
-                this.transitionFrames = 3; // Blend first 3 frames
-            } else {
-                // Normal case
-                this.frameIndex = 0;
-                this.transitionFrames = 0;
+        return new Promise((resolve) => {
+            try {
+                // Store previous animation state for smooth transition
+                const wasIdle = this.isIdleLoop;
+                const previousFrames = this.currentFrames;
+                const previousIndex = this.frameIndex;
+                
+                this.currentFrames = frames;
+                this.isIdleLoop = isIdleLoop;
+                this.showCanvas();
+                
+                // Calculate frame rate based on expected duration if provided
+                if (expectedDuration && !isIdleLoop) {
+                    this.fps = Math.max(15, Math.min(30, frames.length / expectedDuration));
+                    console.log(`Adjusting FPS to ${this.fps} for duration ${expectedDuration}s`);
+                } else {
+                    this.fps = 25; // Default FPS
+                }
+                
+                // For smooth transitions: start from a logical frame index
+                if (!isIdleLoop && wasIdle && previousFrames.length > 0) {
+                    // When transitioning from idle to speech, start from frame 0
+                    this.frameIndex = 0;
+                    this.transitionFrames = 3; // Blend first 3 frames for smooth transition
+                } else if (isIdleLoop && !wasIdle) {
+                    // When returning to idle, start from middle of idle sequence for natural look
+                    this.frameIndex = Math.floor(frames.length / 2);
+                    this.transitionFrames = 3; // Blend first 3 frames
+                } else {
+                    // Normal case
+                    this.frameIndex = 0;
+                    this.transitionFrames = 0;
+                }
+                
+                // Don't update status - let video play uninterrupted
+                this.startFrameAnimation(resolve, isIdleLoop);
+                
+            } catch (error) {
+                console.error('Failed to play video frames:', error);
+                resolve(); // Resolve even on error
             }
-            
-            // Don't update status - let video play uninterrupted
-            this.startFrameAnimation();
-            
-        } catch (error) {
-            console.error('Failed to play video frames:', error);
-            // Don't fall back to placeholder, just continue current animation
-        }
+        });
     }
     
-    startFrameAnimation() {
+    startFrameAnimation(resolveCallback = null, isIdleLoop = false) {
         if (this.animationId) {
             cancelAnimationFrame(this.animationId);
         }
@@ -253,9 +263,12 @@ class AvatarManager {
                     // Normal forward playback for speech/response frames
                     this.frameIndex++;
                     if (this.frameIndex >= this.currentFrames.length) {
-                        // Animation completed - return to idle frames automatically
+                        // Animation completed - notify completion and return to idle
                         this.frameIndex = 0;
                         this.stopAnimation();
+                        if (resolveCallback) {
+                            resolveCallback();
+                        }
                         return;
                     }
                 }
