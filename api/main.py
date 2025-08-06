@@ -4,11 +4,53 @@ OpenAvatarChat API Backend
 Independent backend API extracted from the original OpenAvatarChat application
 """
 
-import sys
+# CUDA Environment Setup - MUST BE FIRST
 import os
+from pathlib import Path
+
+def setup_cuda_environment():
+    """Set up CUDA environment variables and library paths before any CUDA imports"""
+    
+    # Get the virtual environment path
+    script_dir = Path(__file__).parent.parent
+    venv_path = script_dir / ".venv"
+    
+    if venv_path.exists():
+        venv_site_packages = venv_path / "lib" / "python3.11" / "site-packages"
+        
+        # Enhanced CUDA library paths
+        cuda_paths = [
+            str(venv_site_packages / "nvidia" / "cudnn" / "lib"),
+            str(venv_site_packages / "nvidia" / "cuda_runtime" / "lib"), 
+            str(venv_site_packages / "nvidia" / "cublas" / "lib"),
+            str(venv_site_packages / "ctranslate2.libs"),
+            str(venv_site_packages / "torch" / "lib"),
+        ]
+        
+        # Filter existing paths
+        existing_paths = [path for path in cuda_paths if Path(path).exists()]
+        
+        # Set LD_LIBRARY_PATH
+        current_ld_path = os.environ.get('LD_LIBRARY_PATH', '')
+        if existing_paths:
+            if current_ld_path:
+                new_ld_path = ':'.join(existing_paths) + ':' + current_ld_path
+            else:
+                new_ld_path = ':'.join(existing_paths)
+            
+            os.environ['LD_LIBRARY_PATH'] = new_ld_path
+            print(f"✅ CUDA LD_LIBRARY_PATH configured: {new_ld_path}")
+        
+        # Set CUDA environment variables
+        os.environ.setdefault('CUDA_HOME', '/usr/local/cuda')
+        os.environ.setdefault('CUDA_VISIBLE_DEVICES', '0')
+
+# Set up CUDA environment immediately
+setup_cuda_environment()
+
+import sys
 import time
 from datetime import datetime
-from pathlib import Path
 from typing import Dict
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, File, UploadFile

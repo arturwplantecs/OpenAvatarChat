@@ -55,7 +55,7 @@ default:
         api_url: "https://api.openai.com/v1"
         # api_url: 'http://127.0.0.1:11434/v1' # ollama
         # api_url: 'https://generativelanguage.googleapis.com/v1beta/openai/'
-        api_key: "APIHERE"  # Replace with your actual OpenAI API key
+        api_key: "KEY"  # Replace with your actual OpenAI API key
       LiteAvatar:
         module: avatar/liteavatar/avatar_handler_liteavatar
         avatar_name: 20250408/P1-hDQRxa5xfpZK-1yDX8PrQ

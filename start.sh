@@ -66,7 +66,53 @@ if ! check_port 8000; then
     echo -e "${YELLOW}⚠️  Port 8000 is already in use (API might be running)${NC}"
 else
     echo -e "${BLUE}🔧 Starting API server on port 8000 (HTTP)...${NC}"
+    
+    # Set up CUDA environment for GPU acceleration BEFORE changing directory
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    VENV_PATH="$SCRIPT_DIR/.venv"
+    
+    if [ -d "$VENV_PATH" ]; then
+        # Use virtual environment CUDA libraries
+        VENV_SITE_PACKAGES="$VENV_PATH/lib/python3.11/site-packages"
+        
+        # Enhanced CUDA library paths - prioritize virtual environment
+        CUDNN_LIB_PATH="$VENV_SITE_PACKAGES/nvidia/cudnn/lib"
+        CUDA_RUNTIME_PATH="$VENV_SITE_PACKAGES/nvidia/cuda_runtime/lib"
+        CUBLAS_PATH="$VENV_SITE_PACKAGES/nvidia/cublas/lib"
+        CTRANSLATE2_PATH="$VENV_SITE_PACKAGES/ctranslate2.libs"
+        
+        # Add PyTorch CUDA libraries as well
+        TORCH_LIB_PATH="$VENV_SITE_PACKAGES/torch/lib"
+        
+        # Set comprehensive LD_LIBRARY_PATH with virtual environment libraries first
+        export LD_LIBRARY_PATH="$CUDNN_LIB_PATH:$CUDA_RUNTIME_PATH:$CUBLAS_PATH:$CTRANSLATE2_PATH:$TORCH_LIB_PATH:${LD_LIBRARY_PATH:-}"
+        
+        # Also set CUDA environment variables
+        export CUDA_HOME="${CUDA_HOME:-/usr/local/cuda}"
+        export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+        
+        echo -e "${GREEN}✅ CUDA environment configured for GPU acceleration${NC}"
+        echo -e "${BLUE}📍 CUDNN_LIB_PATH: $CUDNN_LIB_PATH${NC}"
+        
+        # Verify critical libraries exist
+        if [ -f "$CUDNN_LIB_PATH/libcudnn_cnn.so.9" ]; then
+            echo -e "${GREEN}✅ libcudnn_cnn.so.9 found${NC}"
+        else
+            echo -e "${RED}❌ libcudnn_cnn.so.9 NOT found${NC}"
+        fi
+        
+        # Verify versioned links exist
+        if [ -f "$CUDNN_LIB_PATH/libcudnn_cnn.so.9.1.0" ]; then
+            echo -e "${GREEN}✅ libcudnn_cnn.so.9.1.0 found${NC}"
+        else
+            echo -e "${RED}❌ libcudnn_cnn.so.9.1.0 NOT found${NC}"
+        fi
+        
+        echo -e "${BLUE}📍 LD_LIBRARY_PATH: $LD_LIBRARY_PATH${NC}"
+    fi
+    
     cd api
+    
     python3 main.py --port 8000 &
     API_PID=$!
     cd ..
