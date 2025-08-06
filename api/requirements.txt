@@ -1,0 +1,16 @@
+# OpenAvatarChat API Backend Requirements - Minimal setup
+
+# Core FastAPI and async support
+fastapi
+uvicorn[standard]
+websockets
+python-multipart
+
+# Pydantic for data validation - use v1 for compatibility  
+pydantic>=1.10,<2.0
+
+# YAML configuration
+PyYAML
+
+# Basic requirements
+typing-extensions
